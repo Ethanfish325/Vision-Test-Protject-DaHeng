@@ -1,0 +1,59 @@
+# -*- coding: utf-8 -*-
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+
+
+class ResultPanel(QWidget):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        title = QLabel("检测结果")
+        title.setStyleSheet("""
+            font-size: 16px; font-weight: bold; color: #d4d4d4;
+            padding: 6px 10px; background-color: #1e1e1e;
+            border-bottom: 1px solid #444;
+        """)
+        title.setFixedHeight(32)
+
+        self.status_indicator = QLabel("等待检测...")
+        self.status_indicator.setAlignment(Qt.AlignCenter)
+        self.status_indicator.setMinimumHeight(80)
+        self.status_indicator.setStyleSheet("""
+            font-size: 26px; font-weight: bold; color: #666;
+            background-color: #1e1e1e; border: 2px solid #444;
+            border-radius: 6px; padding: 8px;
+        """)
+
+        layout.addWidget(title)
+        layout.addWidget(self.status_indicator, 1)
+
+    def show_result(self, passed, message, annotated_image=None, tool_results=None):
+        if passed:
+            self.status_indicator.setText("✓ OK")
+            self.status_indicator.setStyleSheet("""
+                font-size: 32px; font-weight: bold; color: #66BB6A;
+                background-color: #1a3a1a; border: 3px solid #4CAF50;
+                border-radius: 6px; padding: 8px;
+            """)
+        else:
+            self.status_indicator.setText("✗ NG")
+            self.status_indicator.setStyleSheet("""
+                font-size: 32px; font-weight: bold; color: #EF5350;
+                background-color: #3a1a1a; border: 3px solid #EF5350;
+                border-radius: 6px; padding: 8px;
+            """)
+
+    def clear(self):
+        self.status_indicator.setText("等待检测...")
+        self.status_indicator.setStyleSheet("""
+            font-size: 26px; font-weight: bold; color: #666;
+            background-color: #1e1e1e; border: 2px solid #444;
+            border-radius: 6px; padding: 8px;
+        """)

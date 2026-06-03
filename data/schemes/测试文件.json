@@ -1,0 +1,86 @@
+{
+  "name": "测试文件",
+  "version": "1.0",
+  "created_at": "2026-06-02 18:25:44",
+  "author": "",
+  "judge_logic": "AND",
+  "steps": [
+    {
+      "tool_type": "灰度化",
+      "display_name": "灰度化",
+      "params": {
+        "input_source": "原始图像",
+        "method": "标准"
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "多区域ROI",
+      "display_name": "多区域ROI",
+      "params": {
+        "input_source": "原始图像",
+        "regions": []
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "Blob检测",
+      "display_name": "Blob检测",
+      "params": {
+        "input_source": "原始图像",
+        "min_area": 100,
+        "max_area": 50000,
+        "min_circularity": 0.1,
+        "min_convexity": 0.5,
+        "min_inertia_ratio": 0.1,
+        "max_blobs": 50,
+        "filter_by_color": 0,
+        "blob_color": 0
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "颜色识别",
+      "display_name": "颜色识别",
+      "params": {
+        "input_source": "原始图像",
+        "color": "红色",
+        "tolerance": 30
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "快速匹配",
+      "display_name": "快速匹配",
+      "params": {
+        "input_source": "原始图像",
+        "template_path": "",
+        "pyramid_levels": 2,
+        "method": "TM_CCOEFF_NORMED",
+        "threshold": 0.7,
+        "max_matches": 1,
+        "min_distance": 20
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "数值计算",
+      "display_name": "数值计算",
+      "params": {
+        "input_source": "原始图像",
+        "expression": "a + b",
+        "var_a": 0.0,
+        "var_b": 0.0,
+        "var_c": 0.0,
+        "precision": 2
+      },
+      "enabled": true,
+      "judge_rule": null
+    }
+  ]
+}

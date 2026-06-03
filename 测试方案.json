@@ -1,0 +1,123 @@
+{
+  "name": "未命名",
+  "version": "1.0",
+  "created_at": "2026-06-02 10:57:55",
+  "author": "",
+  "judge_logic": "AND",
+  "steps": [
+    {
+      "tool_type": "多区域ROI",
+      "display_name": "多区域ROI",
+      "params": {
+        "input_source": "原始图像",
+        "regions": [
+          {
+            "name": "区域1",
+            "x": 446,
+            "y": 88,
+            "width": 781,
+            "height": 781,
+            "enabled": true
+          },
+          {
+            "name": "区域2",
+            "x": 615,
+            "y": 935,
+            "width": 456,
+            "height": 344,
+            "enabled": true
+          }
+        ]
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "灰度化",
+      "display_name": "灰度化",
+      "params": {
+        "input_source": "区域:区域2",
+        "method": "标准"
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "Canny边缘检测",
+      "display_name": "Canny边缘检测",
+      "params": {
+        "input_source": "上一个工具输出",
+        "low_threshold": 50,
+        "high_threshold": 150,
+        "aperture_size": 3
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "轮廓分析",
+      "display_name": "轮廓分析",
+      "params": {
+        "input_source": "上一个工具输出",
+        "min_area": 10,
+        "max_area": 100000,
+        "draw_bbox": true
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "面积测量",
+      "display_name": "面积测量",
+      "params": {
+        "input_source": "上一个工具输出",
+        "min_area": 100,
+        "max_area": 100000,
+        "unit": "像素"
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "逻辑判断",
+      "display_name": "逻辑判断",
+      "params": {
+        "input_source": "原始图像",
+        "judge_type": "数值范围判断",
+        "input_value": 0.0,
+        "min_value": 0.0,
+        "max_value": 100.0,
+        "compare_type": "大于",
+        "compare_value": 0.0,
+        "logic_gate": "AND",
+        "logic_input_indices": [],
+        "ok_message": "OK",
+        "ng_message": "NG"
+      },
+      "enabled": true,
+      "judge_rule": null
+    },
+    {
+      "tool_type": "模板匹配",
+      "display_name": "模板匹配",
+      "params": {
+        "input_source": "上一个工具输出",
+        "method": "TM_CCOEFF_NORMED",
+        "threshold": 0.4,
+        "max_matches": 1,
+        "min_distance": 20,
+        "template_path": "C:/Users/fyx/Pictures/Saved Pictures/test (2).jpg",
+        "enable_rotation": false,
+        "angle_start": -30,
+        "angle_end": 30,
+        "angle_step": 5,
+        "enable_feature_match": false,
+        "feature_method": "SIFT",
+        "feature_min_matches": 10,
+        "feature_ratio_thresh": 0.75
+      },
+      "enabled": true,
+      "judge_rule": null
+    }
+  ]
+}

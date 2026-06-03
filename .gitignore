@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific - build output
+build/
+
+# Data - keep structure but ignore runtime data
+data/errors/
+data/logs/
+data/config.json
+
+# OS
+Thumbs.db
+.DS_Store
