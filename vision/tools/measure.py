@@ -43,16 +43,20 @@ class AreaMeasure(VisionTool):
 
         areas = []
         display = img.copy()
+        overlay = np.zeros_like(img)
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if min_area <= area <= max_area:
                 areas.append(area)
                 cv2.drawContours(display, [cnt], -1, (0, 255, 0), 2)
+                cv2.drawContours(overlay, [cnt], -1, (0, 255, 0), 2)
                 M = cv2.moments(cnt)
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
                     cy = int(M["m01"] / M["m00"])
                     cv2.putText(display, f"{area:.1f}", (cx-20, cy),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+                    cv2.putText(overlay, f"{area:.1f}", (cx-20, cy),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
         total_area = sum(areas)
@@ -64,6 +68,7 @@ class AreaMeasure(VisionTool):
             success=True,
             passed=passed,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "total_area": total_area,
                 "max_area": max_area_val,
@@ -140,6 +145,7 @@ class DistanceMeasure(VisionTool):
         pass_max = float(self.params.get("pass_max", 1000))
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         distances = []
 
         if mode == "contour_center":
@@ -157,6 +163,10 @@ class DistanceMeasure(VisionTool):
                     cv2.line(display, (int(ref_x), int(ref_y)), (cx, cy), (255, 0, 0), 1)
                     cv2.putText(display, f"{dist:.1f}", (cx, cy-10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                    cv2.drawContours(overlay, [cnt], -1, (0, 255, 0), 2)
+                    cv2.line(overlay, (int(ref_x), int(ref_y)), (cx, cy), (255, 0, 0), 1)
+                    cv2.putText(overlay, f"{dist:.1f}", (cx, cy-10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
         avg_dist = np.mean(distances) if distances else 0
         passed = pass_min <= avg_dist <= pass_max
@@ -165,6 +175,7 @@ class DistanceMeasure(VisionTool):
             success=True,
             passed=passed,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "distance": float(avg_dist),
                 "count": len(distances),
@@ -233,6 +244,7 @@ class PointMeasure(VisionTool):
         mode = self.params.get("mode", "contour_center")
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         points = []
 
         if mode == "contour_center":
@@ -258,6 +270,9 @@ class PointMeasure(VisionTool):
                     cv2.circle(display, (cx, cy), 4, (0, 255, 0), -1)
                     cv2.putText(display, f"({cx},{cy})", (cx+5, cy),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+                    cv2.circle(overlay, (cx, cy), 4, (0, 255, 0), -1)
+                    cv2.putText(overlay, f"({cx},{cy})", (cx+5, cy),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
         elif mode == "corner":
             if len(img.shape) == 3:
@@ -278,6 +293,9 @@ class PointMeasure(VisionTool):
                     cv2.circle(display, (x, y), 4, (0, 255, 0), -1)
                     cv2.putText(display, f"({x},{y})", (x+5, y),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+                    cv2.circle(overlay, (x, y), 4, (0, 255, 0), -1)
+                    cv2.putText(overlay, f"({x},{y})", (x+5, y),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
         elif mode == "blob_center":
             if len(img.shape) == 3:
@@ -293,11 +311,15 @@ class PointMeasure(VisionTool):
                 cv2.circle(display, (x, y), 4, (0, 255, 0), -1)
                 cv2.putText(display, f"({x},{y})", (x+5, y),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+                cv2.circle(overlay, (x, y), 4, (0, 255, 0), -1)
+                cv2.putText(overlay, f"({x},{y})", (x+5, y),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
         return ToolResult(
             success=True,
             passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "point_count": len(points),
                 "points": points,
@@ -373,6 +395,7 @@ class LineMeasure(VisionTool):
         edges = cv2.Canny(gray, self.params["canny_low"], self.params["canny_high"])
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         lines_data = []
 
         if mode == "hough":
@@ -398,6 +421,9 @@ class LineMeasure(VisionTool):
                     cv2.line(display, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(display, f"{length:.1f}", ((x1+x2)//2, (y1+y2)//2),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+                    cv2.line(overlay, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(overlay, f"{length:.1f}", ((x1+x2)//2, (y1+y2)//2),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
         elif mode == "contour":
             binary = context.get_image('binary')
@@ -421,6 +447,7 @@ class LineMeasure(VisionTool):
                     "height": float(h),
                 })
                 cv2.drawContours(display, [box], -1, (0, 255, 0), 2)
+                cv2.drawContours(overlay, [box], -1, (0, 255, 0), 2)
 
         avg_length = np.mean([d["length"] for d in lines_data]) if lines_data else 0
         pass_min = float(self.params.get("pass_min", 0))
@@ -431,6 +458,7 @@ class LineMeasure(VisionTool):
             success=True,
             passed=passed,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "line_count": len(lines_data),
                 "avg_length": float(avg_length),
@@ -517,6 +545,7 @@ class AngleMeasure(VisionTool):
         mode = self.params.get("mode", "contour_angle")
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         angle = 0.0
 
         if mode == "contour_angle":
@@ -544,8 +573,11 @@ class AngleMeasure(VisionTool):
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
                 cv2.drawContours(display, [box], -1, (0, 255, 0), 2)
+                cv2.drawContours(overlay, [box], -1, (0, 255, 0), 2)
                 center = (int(rect[0][0]), int(rect[0][1]))
                 cv2.putText(display, f"{angle_val:.1f}°", (center[0]-20, center[1]-10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+                cv2.putText(overlay, f"{angle_val:.1f}°", (center[0]-20, center[1]-10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
             angle = np.mean(angles) if angles else 0
@@ -572,9 +604,16 @@ class AngleMeasure(VisionTool):
                 cv2.circle(display, pt, 5, color, -1)
                 cv2.putText(display, label, (pt[0]+5, pt[1]-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                cv2.circle(overlay, pt, 5, color, -1)
+                cv2.putText(overlay, label, (pt[0]+5, pt[1]-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             cv2.line(display, p2, p1, (255, 255, 0), 1)
             cv2.line(display, p2, p3, (255, 255, 0), 1)
+            cv2.line(overlay, p2, p1, (255, 255, 0), 1)
+            cv2.line(overlay, p2, p3, (255, 255, 0), 1)
             cv2.putText(display, f"{angle:.1f}°", (p2[0]+10, p2[1]-10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
+            cv2.putText(overlay, f"{angle:.1f}°", (p2[0]+10, p2[1]-10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
 
         pass_min = float(self.params.get("pass_min", 0))
@@ -585,6 +624,7 @@ class AngleMeasure(VisionTool):
             success=True,
             passed=passed,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "angle": float(angle),
                 "mode": mode,
@@ -694,16 +734,20 @@ class ObjectCount(VisionTool):
 
         count = 0
         display = img.copy()
+        overlay = np.zeros_like(img)
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if min_area <= area <= max_area:
                 count += 1
                 cv2.drawContours(display, [cnt], -1, (0, 255, 0), 2)
+                cv2.drawContours(overlay, [cnt], -1, (0, 255, 0), 2)
                 M = cv2.moments(cnt)
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
                     cy = int(M["m01"] / M["m00"])
                     cv2.putText(display, f"#{count}", (cx-10, cy),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+                    cv2.putText(overlay, f"#{count}", (cx-10, cy),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
         passed = pass_min <= count <= pass_max
@@ -712,6 +756,7 @@ class ObjectCount(VisionTool):
             success=True,
             passed=passed,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "count": count,
                 "min_area": min_area,

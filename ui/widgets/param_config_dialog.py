@@ -248,9 +248,11 @@ class ParamConfigDialog(QDialog):
             )
 
             source = self.tool.params.get("_input_source", "current")
-            if source.startswith("区域:") and self.context_info.get("regions"):
-                for name in self.context_info["regions"]:
-                    context.regions[name] = self.preview_image.copy()
+            if source.startswith("region:"):
+                region_name = source[7:]
+                regions_map = self.context_info.get("regions_map", {})
+                if region_name in regions_map:
+                    context.regions[region_name] = regions_map[region_name]
 
             result = self.tool.process(context)
             if result.processed_image is not None:

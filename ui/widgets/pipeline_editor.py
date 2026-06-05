@@ -400,6 +400,7 @@ class PipelineEditor(QWidget):
 
     def _get_context_info(self, current_step_index: int) -> Dict:
         regions = []
+        regions_map = {}  # name -> (x, y, w, h)
         steps = []
         slot_widget = self.flow_canvas.get_slot_widget()
         # 遍历所有slots，使用slot_index进行比较
@@ -412,12 +413,19 @@ class PipelineEditor(QWidget):
             if slot.slot_index < current_step_index and slot.tool_name == "MultiROI":
                 for r in slot.params.get("regions", []):
                     if r.get("enabled", True):
-                        regions.append(r.get("name", ""))
+                        name = r.get("name", "")
+                        regions.append(name)
+                        regions_map[name] = (
+                            r.get("x", 0),
+                            r.get("y", 0),
+                            r.get("width", r.get("w", 100)),
+                            r.get("height", r.get("h", 100)),
+                        )
             steps.append({
                 "index": slot.slot_index,
                 "name": slot.tool_name,
             })
-        return {"regions": regions, "steps": steps}
+        return {"regions": regions, "regions_map": regions_map, "steps": steps}
 
     def _get_preview_image(self):
         # 优先从MainWindow获取_raw_image

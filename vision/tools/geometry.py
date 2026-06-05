@@ -110,6 +110,7 @@ class CircleDetection(VisionTool):
                                     minRadius=minRadius, maxRadius=maxRadius)
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         circle_data = []
         if circles is not None:
             circles_list = np.round(circles[0]).astype("int").tolist()
@@ -119,12 +120,15 @@ class CircleDetection(VisionTool):
             for (x, y, r) in circles_list:
                 cv2.circle(display, (x, y), r, (0, 255, 0), 2)
                 cv2.circle(display, (x, y), 2, (0, 0, 255), 3)
+                cv2.circle(overlay, (x, y), r, (0, 255, 0), 2)
+                cv2.circle(overlay, (x, y), 2, (0, 0, 255), 3)
                 circle_data.append({"x": int(x), "y": int(y), "radius": int(r)})
 
         return ToolResult(
             success=True,
             passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "circle_count": len(circle_data),
                 "circles": circle_data,
@@ -275,6 +279,7 @@ class HoughLineDetection(VisionTool):
         lines = cv2.HoughLines(edges, rho, theta_rad, threshold)
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         line_data = []
         if lines is not None:
             for line in lines:
@@ -288,6 +293,7 @@ class HoughLineDetection(VisionTool):
                 x2 = int(x0 - 1000 * (-b))
                 y2 = int(y0 - 1000 * (a))
                 cv2.line(display, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.line(overlay, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 line_data.append({
                     "rho": float(rho_val),
                     "theta": float(theta_val),
@@ -298,6 +304,7 @@ class HoughLineDetection(VisionTool):
             success=True,
             passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "line_count": len(line_data),
                 "lines": line_data,
@@ -404,6 +411,7 @@ class ContourRectDetection(VisionTool):
 
         rectangles = []
         display = img.copy()
+        overlay = np.zeros_like(img)
 
         for cnt in contours:
             area = cv2.contourArea(cnt)
@@ -428,6 +436,11 @@ class ContourRectDetection(VisionTool):
                     cv2.putText(display, f"({w}x{h})", (x, y-5),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
+                    cv2.drawContours(overlay, [approx], -1, (0, 255, 0), 2)
+                    cv2.drawContours(overlay, [box], -1, (255, 0, 0), 1)
+                    cv2.putText(overlay, f"({w}x{h})", (x, y-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
                     rectangles.append({
                         "area": area,
                         "width": w, "height": h,
@@ -441,6 +454,7 @@ class ContourRectDetection(VisionTool):
             success=True,
             passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "rect_count": len(rectangles),
                 "rectangles": rectangles,
@@ -545,12 +559,15 @@ class SimpleBlobDetect(VisionTool):
         keypoints = sorted(keypoints, key=lambda kp: kp.size, reverse=True)[:max_count]
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         blob_data = []
         for kp in keypoints:
             x, y = int(kp.pt[0]), int(kp.pt[1])
             r = int(kp.size / 2)
             cv2.circle(display, (x, y), r, (0, 255, 0), 2)
             cv2.circle(display, (x, y), 2, (0, 0, 255), -1)
+            cv2.circle(overlay, (x, y), r, (0, 255, 0), 2)
+            cv2.circle(overlay, (x, y), 2, (0, 0, 255), -1)
             blob_data.append({
                 "x": x, "y": y,
                 "radius": r,
@@ -562,6 +579,7 @@ class SimpleBlobDetect(VisionTool):
             success=True,
             passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "blob_count": len(blob_data),
                 "blobs": blob_data,

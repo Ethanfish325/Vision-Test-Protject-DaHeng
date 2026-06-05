@@ -243,6 +243,7 @@ class CameraPanel(QWidget):
             """)
         self.exp_auto_check = QCheckBox("自动曝光")
         self.exp_auto_check.setStyleSheet("color: #d4d4d4;")
+        self.exp_auto_check.setChecked(True)  # 默认开启自动曝光
 
         exp_btn_layout.addWidget(self.exp_minus_btn)
         exp_btn_layout.addWidget(self.exp_plus_btn)
@@ -287,6 +288,7 @@ class CameraPanel(QWidget):
             """)
         self.gain_auto_check = QCheckBox("自动增益")
         self.gain_auto_check.setStyleSheet("color: #d4d4d4;")
+        self.gain_auto_check.setChecked(True)  # 默认开启自动增益
 
         gain_btn_layout.addWidget(self.gain_minus_btn)
         gain_btn_layout.addWidget(self.gain_plus_btn)
@@ -490,8 +492,20 @@ class CameraPanel(QWidget):
             self.trigger_btn.setEnabled(self.cam_mgr.is_trigger_mode)
             self.display_label.setText("实时画面中...")
 
+            # 默认开启自动曝光和自动增益
+            self.cam_mgr.set_enum_param("ExposureAuto", 1)
+            self.cam_mgr.set_enum_param("GainAuto", 1)
+
             # 读取当前参数并更新 UI
             self._refresh_params()
+
+            # 根据自动曝光/增益状态更新滑块可用性
+            self.exp_slider.setEnabled(not self.exp_auto_check.isChecked())
+            self.exp_minus_btn.setEnabled(not self.exp_auto_check.isChecked())
+            self.exp_plus_btn.setEnabled(not self.exp_auto_check.isChecked())
+            self.gain_slider.setEnabled(not self.gain_auto_check.isChecked())
+            self.gain_minus_btn.setEnabled(not self.gain_auto_check.isChecked())
+            self.gain_plus_btn.setEnabled(not self.gain_auto_check.isChecked())
 
             msg = "相机已打开"
             self.status_bar.showMessage(msg)

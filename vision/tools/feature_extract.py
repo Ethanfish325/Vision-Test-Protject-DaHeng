@@ -380,6 +380,9 @@ class ContourAnalysis(VisionTool):
 
         cv2.drawContours(display, filtered, -1, (0, 255, 0), 2)
 
+        overlay = np.zeros_like(img) if img.shape[-1] == 3 else np.zeros((*img.shape, 3), dtype=np.uint8)
+        cv2.drawContours(overlay, filtered, -1, (0, 255, 0), 2)
+
         for i, cnt in enumerate(filtered):
             area = cv2.contourArea(cnt)
             perimeter = cv2.arcLength(cnt, True)
@@ -388,6 +391,7 @@ class ContourAnalysis(VisionTool):
             cx = int(moments['m10'] / (moments['m00'] + 1e-6))
             cy = int(moments['m01'] / (moments['m00'] + 1e-6))
             cv2.putText(display, f"#{i}", (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+            cv2.putText(overlay, f"#{i}", (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
         result_data = {
             'contour_count': len(filtered),
@@ -401,6 +405,7 @@ class ContourAnalysis(VisionTool):
         return ToolResult(
             success=True, passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={"contour_count": len(filtered)},
             message=f"找到 {len(filtered)} 个轮廓"
         )
@@ -527,6 +532,9 @@ class BlobDetection(VisionTool):
 
         cv2.drawKeypoints(display, keypoints, display, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
+        overlay = np.zeros_like(display)
+        cv2.drawKeypoints(overlay, keypoints, overlay, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+
         blob_data = []
         for kp in keypoints:
             blob_data.append({
@@ -541,6 +549,7 @@ class BlobDetection(VisionTool):
         return ToolResult(
             success=True, passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={"blob_count": len(keypoints)},
             message=f"检测到 {len(keypoints)} 个斑点"
         )
@@ -652,9 +661,13 @@ class ContourFilter(VisionTool):
         filtered = filtered[:max_count]
 
         cv2.drawContours(display, filtered, -1, (0, 255, 255), 2)
+
+        overlay = np.zeros_like(display)
+        cv2.drawContours(overlay, filtered, -1, (0, 255, 255), 2)
         for i, cnt in enumerate(filtered):
             x, y, w, h = cv2.boundingRect(cnt)
             cv2.putText(display, f"#{i}", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+            cv2.putText(overlay, f"#{i}", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
 
         filtered_data = {
             'contour_count': len(filtered),
@@ -666,6 +679,7 @@ class ContourFilter(VisionTool):
         return ToolResult(
             success=True, passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={"contour_count": len(filtered)},
             message=f"筛选后剩余 {len(filtered)} 个轮廓"
         )
@@ -836,11 +850,13 @@ class LineDetection(VisionTool):
                                  maxLineGap=int(self.params.get('max_line_gap', 10)))
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         line_data = []
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
                 cv2.line(display, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.line(overlay, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
                 angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
                 line_data.append({
@@ -853,6 +869,7 @@ class LineDetection(VisionTool):
         return ToolResult(
             success=True, passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "line_count": len(line_data),
                 "lines": line_data,
@@ -970,6 +987,7 @@ class RectangleDetection(VisionTool):
 
         rectangles = []
         display = img.copy()
+        overlay = np.zeros_like(img)
 
         for cnt in contours:
             area = cv2.contourArea(cnt)
@@ -994,6 +1012,11 @@ class RectangleDetection(VisionTool):
                     cv2.putText(display, f"({w}x{h})", (x, y-5),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
+                    cv2.drawContours(overlay, [approx], -1, (0, 255, 0), 2)
+                    cv2.drawContours(overlay, [box], -1, (255, 0, 0), 1)
+                    cv2.putText(overlay, f"({w}x{h})", (x, y-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
                     rectangles.append({
                         "area": area,
                         "width": w, "height": h,
@@ -1009,6 +1032,7 @@ class RectangleDetection(VisionTool):
         return ToolResult(
             success=True, passed=True,
             processed_image=display,
+            overlay_image=overlay,
             data={
                 "rect_count": len(rectangles),
                 "rectangles": rectangles,

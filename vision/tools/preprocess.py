@@ -259,15 +259,21 @@ class MultiROI(VisionTool):
         regions = self._normalize_regions(raw_regions, img.shape)
 
         display = img.copy()
+        # 在黑色背景上绘制标注，用于叠加到原图
+        overlay = np.zeros_like(img)
         for name, (x, y, w, h) in regions.items():
             cv2.rectangle(display, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(display, name, (x, y - 5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(overlay, name, (x, y - 5),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
         return ToolResult(
             success=True,
             passed=True,
             processed_image=display,
+            overlay_image=overlay,
             regions=regions,
             data={"region_count": len(regions)},
             message=f"定义了 {len(regions)} 个ROI区域"

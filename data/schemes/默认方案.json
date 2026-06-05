@@ -32,32 +32,32 @@
           },
           {
             "name": "脚垫1",
-            "x": 43,
-            "y": 163,
-            "width": 249,
-            "height": 274,
+            "x": 105,
+            "y": 264,
+            "width": 226,
+            "height": 235,
             "enabled": true
           },
           {
             "name": "脚垫2",
-            "x": 2649,
-            "y": 177,
+            "x": 2510,
+            "y": 245,
             "width": 255,
             "height": 337,
             "enabled": true
           },
           {
             "name": "脚垫3",
-            "x": 2611,
-            "y": 1384,
+            "x": 2510,
+            "y": 1398,
             "width": 249,
             "height": 269,
             "enabled": true
           },
           {
             "name": "脚垫4",
-            "x": 0,
-            "y": 1379,
+            "x": 81,
+            "y": 1365,
             "width": 254,
             "height": 289,
             "enabled": true
@@ -78,92 +78,51 @@
       "judge_rule": null
     },
     {
-      "tool_type": "CannyEdge",
+      "tool_type": "ColorRecognition",
       "params": {
-        "input_source": "上一个工具输出",
-        "low_threshold": 50,
-        "high_threshold": 150,
-        "aperture_size": 3,
-        "auto_threshold": false,
-        "l2_gradient": false
-      },
-      "enabled": true,
-      "judge_rule": null
-    },
-    {
-      "tool_type": "ContourAnalysis",
-      "params": {
-        "input_source": "上一个工具输出",
-        "min_area": 10,
-        "max_area": 100000,
-        "draw_bbox": true,
-        "mode": 0,
-        "method": 2,
-        "sort_by": "area",
-        "sort_descending": true,
-        "max_count": 10,
-        "use_existing_binary": true
-      },
-      "enabled": true,
-      "judge_rule": null
-    },
-    {
-      "tool_type": "AreaMeasure",
-      "params": {
-        "input_source": "上一个工具输出",
+        "color_name": "白色",
+        "h_min": 0,
+        "s_min": 0,
+        "v_min": 200,
+        "h_max": 180,
+        "s_max": 30,
+        "v_max": 255,
         "min_area": 100,
-        "max_area": 100000,
-        "unit": "像素",
         "pass_min": 0,
-        "pass_max": 1000000
+        "pass_max": 100,
+        "color_space": "HSV",
+        "analyze_regions": false,
+        "_input_source": "region:标签1"
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "LogicJudge",
+      "tool_type": "ColorRecognition",
       "params": {
-        "input_source": "原始图像",
-        "judge_type": "数值范围判断",
-        "input_value": 0.0,
-        "min_value": 0.0,
-        "max_value": 100.0,
-        "compare_type": "大于",
-        "compare_value": 0.0,
-        "ok_message": "OK",
-        "ng_message": "NG",
-        "judge_mode": "expression",
-        "expression": "AND(area>100, distance<50)",
-        "conditions": [],
-        "logic_type": "and"
+        "_input_source": "region:标签2",
+        "color_name": "白色",
+        "h_min": 0,
+        "s_min": 0,
+        "v_min": 200,
+        "h_max": 180,
+        "s_max": 30,
+        "v_max": 255
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "TemplateMatch",
+      "tool_type": "ColorRecognition",
       "params": {
-        "input_source": "上一个工具输出",
-        "method": "TM_CCOEFF_NORMED",
-        "threshold": 0.4,
-        "max_matches": 1,
-        "min_distance": 20,
-        "template_path": "C:/Users/fyx/Pictures/Saved Pictures/test (2).jpg",
-        "enable_rotation": false,
-        "angle_start": -30,
-        "angle_end": 30,
-        "angle_step": 5,
-        "enable_feature_match": false,
-        "feature_method": "SIFT",
-        "feature_min_matches": 10,
-        "feature_ratio_thresh": 0.75,
-        "mode": "standard",
-        "template_data": null,
-        "feature_mode": "sift",
-        "min_matches": 10,
-        "nms_distance": 20,
-        "use_mask": false,
-        "mask_path": ""
+        "color_name": "白色",
+        "h_min": 0,
+        "s_min": 0,
+        "v_min": 200,
+        "h_max": 180,
+        "s_max": 30,
+        "v_max": 255,
+        "_input_source": "region:标签3"
       },
       "enabled": true,
       "judge_rule": null

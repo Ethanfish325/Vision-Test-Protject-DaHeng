@@ -36,10 +36,24 @@ class VisionEngine:
             passed, results, current_image = self._pipeline.execute(cv_image)
             self._last_results = results
 
-            annotated = current_image.copy()
+            # 在原图上叠加所有工具的 overlay_image，生成标注结果图
+            annotated = cv_image.copy()
             for r in results:
-                if r.processed_image is not None:
-                    annotated = r.processed_image.copy()
+                if r.overlay_image is not None:
+                    overlay = r.overlay_image
+                    # 尺寸不一致时，将 overlay 缩放到与 annotated 一致
+                    if overlay.shape[:2] != annotated.shape[:2]:
+                        overlay = cv2.resize(
+                            overlay,
+                            (annotated.shape[1], annotated.shape[0])
+                        )
+                    # 通过 mask 只叠加非黑色部分（标注内容）
+                    gray_overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2GRAY)
+                    _, mask = cv2.threshold(gray_overlay, 1, 255, cv2.THRESH_BINARY)
+                    mask_inv = cv2.bitwise_not(mask)
+                    bg = cv2.bitwise_and(annotated, annotated, mask=mask_inv)
+                    fg = cv2.bitwise_and(overlay, overlay, mask=mask)
+                    annotated = cv2.add(bg, fg)
 
             if passed:
                 message = "检测通过 (OK)"

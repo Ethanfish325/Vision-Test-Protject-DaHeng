@@ -53,6 +53,8 @@ class VisionTool(ABC):
             self.display_name = cls_display
         else:
             self.display_name = self.name
+        # 当使用 ROI 区域作为输入源时，保存完整帧图像，供子类返回 processed_image
+        self._full_frame_image: Optional[np.ndarray] = None
 
     @abstractmethod
     def process(self, context: PipelineContext) -> ToolResult:
@@ -61,13 +63,31 @@ class VisionTool(ABC):
     def _get_input_image(self, context: PipelineContext) -> np.ndarray:
         input_source = self.params.get("_input_source", "current")
 
+        # 保存完整帧，供子类在返回 processed_image 时使用
+        # 注意：如果上游有灰度化步骤，current_image 可能是单通道
+        # 这里统一转成3通道BGR，确保下游步骤不会因通道数问题报错
+        full_frame = context.current_image.copy()
+        if len(full_frame.shape) == 2 or (len(full_frame.shape) == 3 and full_frame.shape[2] == 1):
+            full_frame = cv2.cvtColor(full_frame, cv2.COLOR_GRAY2BGR)
+        self._full_frame_image = full_frame
+
         if input_source == "original":
             return context.original_image.copy()
         elif input_source.startswith("region:"):
             region_name = input_source[7:]
             if region_name in context.regions:
                 x, y, w, h = context.regions[region_name]
-                return context.original_image[y:y+h, x:x+w].copy()
+                # 从 current_image 裁剪 ROI 区域，保留上游预处理结果
+                # 裁剪坐标不能超出图像边界
+                img_h, img_w = context.current_image.shape[:2]
+                x = max(0, min(x, img_w - 1))
+                y = max(0, min(y, img_h - 1))
+                w = min(w, img_w - x)
+                h = min(h, img_h - y)
+                if w > 0 and h > 0:
+                    return context.current_image[y:y+h, x:x+w].copy()
+                else:
+                    return context.current_image.copy()
             else:
                 return context.current_image.copy()
         else:
@@ -92,6 +112,10 @@ class VisionTool(ABC):
         index = combo.findData(current_source)
         if index >= 0:
             combo.setCurrentIndex(index)
+
+        # 用户切换输入源时同步更新 params
+        combo.currentIndexChanged.connect(
+            lambda i: self.params.update({"_input_source": combo.itemData(i)}))
 
         widgets.append(("输入源:", combo))
         return widgets

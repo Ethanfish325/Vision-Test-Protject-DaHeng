@@ -95,6 +95,11 @@ class MainWindow(QMainWindow):
         self._schemes = {}
         self._current_scheme_name = None
 
+        # 步骤导航相关
+        self._step_results = []       # List[ToolResult]，流水线各步骤结果
+        self._current_step_index = -1  # -1 表示显示最终标注结果
+        self._annotated_image = None   # 最终标注结果图（原始图 + 所有 overlay 叠加）
+
         self._setup_ui()
         self._load_schemes()
         self._auto_load_default_scheme()
@@ -139,7 +144,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 2, 10, 2)
         layout.setSpacing(8)
 
-        self.btn_worker_mode = QPushButton("🔧 工人模式")
+        self.btn_worker_mode = QPushButton("🔧 生产模式")
         self.btn_worker_mode.setCheckable(True)
         self.btn_worker_mode.setChecked(True)
         self.btn_worker_mode.setStyleSheet("""
@@ -190,7 +195,7 @@ class MainWindow(QMainWindow):
         self.btn_engineer_mode.setChecked(index == 1)
 
         if index == 0:
-            self.status_label.setText("工人模式")
+            self.status_label.setText("生产模式")
         else:
             self.status_label.setText("工程师模式")
 
@@ -419,7 +424,7 @@ class MainWindow(QMainWindow):
             pipeline = Pipeline.from_dict(data)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载方案文件失败:\n{e}")
-            log_error(f"工人模式导入方案失败: {e}")
+            log_error(f"生产模式导入方案失败: {e}")
             return
 
         self.vision_engine.set_pipeline(pipeline)
@@ -435,7 +440,7 @@ class MainWindow(QMainWindow):
         self.scheme_status_label.setText(f"当前方案: {name}")
         self.mode_scheme_label.setText(f"当前方案: {name}")
 
-        log_info(f"工人模式导入方案: {name}")
+        log_info(f"生产模式导入方案: {name}")
         QMessageBox.information(self, "成功", f"方案「{name}」已导入并应用")
 
     def _build_engineer_page(self):
@@ -540,6 +545,46 @@ class MainWindow(QMainWindow):
         test_toolbar.addWidget(self.eng_btn_run_preview)
         test_toolbar.addStretch()
 
+        # 步骤导航栏
+        step_nav_bar = QWidget()
+        step_nav_bar.setStyleSheet("background-color: #252525; border: 1px solid #444; border-radius: 3px;")
+        step_nav_layout = QHBoxLayout(step_nav_bar)
+        step_nav_layout.setContentsMargins(6, 2, 6, 2)
+        step_nav_layout.setSpacing(6)
+
+        self.eng_btn_prev_step = QPushButton("◀ 上一步")
+        self.eng_btn_prev_step.setEnabled(False)
+        self.eng_btn_prev_step.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4; padding: 3px 10px;
+                border: 1px solid #555; border-radius: 3px; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
+        """)
+
+        self.eng_step_label = QLabel("最终结果")
+        self.eng_step_label.setAlignment(Qt.AlignCenter)
+        self.eng_step_label.setStyleSheet("""
+            font-size: 14px; font-weight: bold; color: #4A90D9;
+            padding: 3px 8px; min-width: 120px;
+        """)
+
+        self.eng_btn_next_step = QPushButton("下一步 ▶")
+        self.eng_btn_next_step.setEnabled(False)
+        self.eng_btn_next_step.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4; padding: 3px 10px;
+                border: 1px solid #555; border-radius: 3px; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
+        """)
+
+        step_nav_layout.addWidget(self.eng_btn_prev_step)
+        step_nav_layout.addWidget(self.eng_step_label, 1)
+        step_nav_layout.addWidget(self.eng_btn_next_step)
+
         self.eng_test_display = QLabel()
         self.eng_test_display.setStyleSheet("""
             QLabel {
@@ -552,6 +597,7 @@ class MainWindow(QMainWindow):
         self.eng_test_display.setText("点击「加载测试图像」选择图片")
 
         test_layout.addLayout(test_toolbar)
+        test_layout.addWidget(step_nav_bar)
         test_layout.addWidget(self.eng_test_display, 1)
 
         self.eng_result_panel = ResultPanel()
@@ -588,6 +634,8 @@ class MainWindow(QMainWindow):
         self.eng_btn_delete.clicked.connect(self._delete_scheme)
         self.eng_btn_load_test.clicked.connect(self._load_test_image)
         self.eng_btn_run_preview.clicked.connect(self._run_preview)
+        self.eng_btn_prev_step.clicked.connect(self._on_prev_step)
+        self.eng_btn_next_step.clicked.connect(self._on_next_step)
         self.pipeline_editor.pipeline_changed.connect(self._on_editor_changed)
 
         self.stack.addWidget(page)
@@ -636,7 +684,7 @@ class MainWindow(QMainWindow):
         scheme_menu.addAction(self.act_export_scheme)
 
         view_menu = menubar.addMenu("视图")
-        self.act_switch_worker = QAction("工人模式", self)
+        self.act_switch_worker = QAction("生产模式", self)
         self.act_switch_worker.triggered.connect(lambda: self._switch_mode(0))
         self.act_switch_engineer = QAction("工程师模式", self)
         self.act_switch_engineer.triggered.connect(lambda: self._switch_mode(1))
@@ -949,7 +997,7 @@ class MainWindow(QMainWindow):
                 return
             self._raw_image = img
             self._raw_height, self._raw_width = img.shape[:2]
-            self._show_cv_image(img)
+            self._show_worker_image(img)
             self.worker_btn_detect.setEnabled(True)
             self.worker_btn_capture.setEnabled(True)
             self.act_capture.setEnabled(True)
@@ -965,7 +1013,7 @@ class MainWindow(QMainWindow):
         self._raw_height = height
         self._raw_image = self._convert_to_cv(width, height, pixel_type, img_bytes)
         if self._raw_image is not None:
-            self._show_cv_image(self._raw_image)
+            self._show_worker_image(self._raw_image)
 
     def _on_capture_completed(self, width, height, pixel_type, img_bytes):
         self._raw_width = width
@@ -977,11 +1025,12 @@ class MainWindow(QMainWindow):
         self.act_open_camera.setEnabled(False)
         self.act_close_camera.setEnabled(True)
         if self._raw_image is not None:
-            self._show_cv_image(self._raw_image)
+            self._show_worker_image(self._raw_image)
         self.status_label.setText("拍照完成，可开始检测")
         self.worker_status_label.setText("拍照完成，可开始检测")
 
     def _show_cv_image(self, cv_img):
+        """通用图像显示（同时更新 Worker 和 Engineer 显示区）"""
         if cv_img is None:
             return
         try:
@@ -1001,6 +1050,108 @@ class MainWindow(QMainWindow):
             self.eng_test_display.setPixmap(scaled_eng)
         except Exception as e:
             self.worker_display.setText(f"图像显示错误: {e}")
+
+    def _show_worker_image(self, cv_img):
+        """Worker 模式：显示原始图像 + 标注叠加（仅更新 worker_display）"""
+        if cv_img is None:
+            return
+        try:
+            if len(cv_img.shape) == 2:
+                h, w = cv_img.shape
+                q_img = QImage(cv_img.data, w, h, w, QImage.Format_Grayscale8)
+            else:
+                h, w, ch = cv_img.shape
+                rgb_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+                q_img = QImage(rgb_img.data, w, h, ch * w, QImage.Format_RGB888)
+            pix = QPixmap.fromImage(q_img)
+
+            scaled = pix.scaled(self.worker_display.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.worker_display.setPixmap(scaled)
+        except Exception as e:
+            self.worker_display.setText(f"图像显示错误: {e}")
+
+    def _show_engineer_image(self, cv_img):
+        """Engineer 模式：显示原始图像 + 标注叠加（仅更新 eng_test_display）"""
+        if cv_img is None:
+            return
+        try:
+            if len(cv_img.shape) == 2:
+                h, w = cv_img.shape
+                q_img = QImage(cv_img.data, w, h, w, QImage.Format_Grayscale8)
+            else:
+                h, w, ch = cv_img.shape
+                rgb_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+                q_img = QImage(rgb_img.data, w, h, ch * w, QImage.Format_RGB888)
+            pix = QPixmap.fromImage(q_img)
+
+            scaled = pix.scaled(self.eng_test_display.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.eng_test_display.setPixmap(scaled)
+        except Exception as e:
+            self.eng_test_display.setText(f"图像显示错误: {e}")
+
+    # ────────── 步骤导航 ──────────
+
+    def _update_step_nav_buttons(self):
+        """根据当前步骤索引更新导航按钮状态和标签"""
+        total = len(self._step_results)
+        if total == 0:
+            self.eng_btn_prev_step.setEnabled(False)
+            self.eng_btn_next_step.setEnabled(False)
+            self.eng_step_label.setText("最终结果")
+            return
+
+        idx = self._current_step_index
+        if idx < 0:
+            # 显示最终标注结果
+            self.eng_step_label.setText(f"最终结果 ({total} 步)")
+            self.eng_btn_prev_step.setEnabled(total > 0)
+            self.eng_btn_next_step.setEnabled(total > 0)
+        else:
+            r = self._step_results[idx]
+            name = r.tool_name or r.tool_type or f"步骤{idx+1}"
+            status = "✓" if r.passed else "✗"
+            self.eng_step_label.setText(f"步骤{idx+1}: {name} {status}")
+            self.eng_btn_prev_step.setEnabled(idx > 0)
+            self.eng_btn_next_step.setEnabled(idx < total - 1)
+
+    def _show_step_image(self, index: int):
+        """显示指定步骤的图像：index=-1 显示最终标注结果，否则显示该步骤的 processed_image"""
+        if index < 0:
+            # 显示最终标注结果（原始图 + 所有 overlay 叠加）
+            if self._annotated_image is not None:
+                self._show_engineer_image(self._annotated_image)
+            elif self._raw_image is not None:
+                self._show_engineer_image(self._raw_image)
+        elif 0 <= index < len(self._step_results):
+            r = self._step_results[index]
+            if r.processed_image is not None:
+                self._show_engineer_image(r.processed_image)
+            elif self._raw_image is not None:
+                self._show_engineer_image(self._raw_image)
+
+    def _on_prev_step(self):
+        """上一步"""
+        if self._current_step_index < 0:
+            # 当前显示最终结果，跳到最后一步
+            self._current_step_index = len(self._step_results) - 1
+        else:
+            self._current_step_index -= 1
+        self._show_step_image(self._current_step_index)
+        self._update_step_nav_buttons()
+
+    def _on_next_step(self):
+        """下一步"""
+        total = len(self._step_results)
+        if self._current_step_index < 0:
+            # 从最终结果跳到第一步
+            self._current_step_index = 0
+        elif self._current_step_index < total - 1:
+            self._current_step_index += 1
+        else:
+            # 已到最后一步，回到最终结果
+            self._current_step_index = -1
+        self._show_step_image(self._current_step_index)
+        self._update_step_nav_buttons()
 
     def _convert_to_cv(self, width, height, pixel_type, img_bytes):
         """将相机原始帧数据转换为 OpenCV BGR 图像"""
@@ -1029,7 +1180,7 @@ class MainWindow(QMainWindow):
                 return
             self._raw_image = img
             self._raw_height, self._raw_width = img.shape[:2]
-            self._show_cv_image(img)
+            self._show_engineer_image(img)
             self.worker_btn_detect.setEnabled(True)
             self.status_label.setText(f"已加载测试图像: {os.path.basename(filepath)}")
             self.worker_status_label.setText(f"已加载测试图像: {os.path.basename(filepath)}")
@@ -1063,6 +1214,11 @@ class MainWindow(QMainWindow):
 
             results = self.vision_engine.get_last_results()
 
+            # 存储步骤结果用于导航
+            self._step_results = list(results) if results else []
+            self._annotated_image = annotated
+            self._current_step_index = -1  # 默认显示最终结果
+
             tool_results = None
             if results:
                 total_ms = sum(r.elapsed_ms for r in results)
@@ -1081,8 +1237,10 @@ class MainWindow(QMainWindow):
 
             self.eng_result_panel.show_result(passed, message, annotated, tool_results)
 
+            # 显示最终标注结果并更新导航按钮
             if annotated is not None:
-                self._show_cv_image(annotated)
+                self._show_engineer_image(annotated)
+            self._update_step_nav_buttons()
 
             for i, r in enumerate(results):
                 ts = datetime.now().strftime("%H:%M:%S")
@@ -1158,7 +1316,7 @@ class MainWindow(QMainWindow):
                 self.worker_status_label.setText("检测不通过 (NG)")
 
             if annotated is not None:
-                self._show_cv_image(annotated)
+                self._show_worker_image(annotated)
 
             for i, r in enumerate(results):
                 ts = datetime.now().strftime("%H:%M:%S")

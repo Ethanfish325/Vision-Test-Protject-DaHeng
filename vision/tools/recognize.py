@@ -70,6 +70,10 @@ class ColorRecognition(VisionTool):
         if img is None:
             return ToolResult(success=False, passed=False, message="无输入图像")
 
+        # 如果输入是单通道灰度图，转换为3通道BGR（颜色识别需要3通道）
+        if len(img.shape) == 2 or (len(img.shape) == 3 and img.shape[2] == 1):
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
         color_space = self.params.get("color_space", "HSV")
         
         if color_space == "Lab":
@@ -138,10 +142,43 @@ class ColorRecognition(VisionTool):
         if self.params.get("analyze_regions", False):
             result_data["regions"] = region_data
 
+        # 使用完整帧作为 processed_image，确保下游步骤能访问完整图像
+        output_image = self._full_frame_image if self._full_frame_image is not None else img
+
+        # 在完整帧的对应位置绘制 overlay 标注
+        input_source = self.params.get("_input_source", "current")
+        if input_source.startswith("region:") and self._full_frame_image is not None:
+            overlay = np.zeros_like(self._full_frame_image)
+            region_name = input_source[7:]
+            if region_name in context.regions:
+                rx, ry, rw, rh = context.regions[region_name]
+                # 将 ROI 内的标注绘制到完整帧 overlay 的对应位置
+                for cnt in contours:
+                    area = cv2.contourArea(cnt)
+                    if area >= min_area:
+                        # 将轮廓坐标从 ROI 局部坐标转换为完整帧坐标
+                        cnt_full = cnt.copy()
+                        cnt_full[:, :, 0] += rx
+                        cnt_full[:, :, 1] += ry
+                        cv2.drawContours(overlay, [cnt_full], -1, (0, 255, 0), 2)
+                        x, y, w, h = cv2.boundingRect(cnt_full)
+                        cv2.putText(overlay, f"#{valid_count}", (x, y-5),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        else:
+            overlay = np.zeros_like(img)
+            for cnt in contours:
+                area = cv2.contourArea(cnt)
+                if area >= min_area:
+                    cv2.drawContours(overlay, [cnt], -1, (0, 255, 0), 2)
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    cv2.putText(overlay, f"#{valid_count}", (x, y-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
         return ToolResult(
             success=True,
             passed=passed,
-            processed_image=display,
+            processed_image=output_image,
+            overlay_image=overlay,
             data=result_data,
             message=f"颜色区域占比={area_ratio:.1f}% ({color_space})"
         )
@@ -457,6 +494,7 @@ class TemplateMatch(VisionTool):
 
         th, tw = template_gray.shape[:2]
         display = img.copy()
+        overlay = np.zeros_like(img)
         matches_data = []
 
         use_mask = self.params.get("use_mask", False)
@@ -497,6 +535,9 @@ class TemplateMatch(VisionTool):
                 cv2.rectangle(display, (x, y), (x + tw, y + th), (0, 255, 0), 2)
                 cv2.putText(display, f"{score:.2f}", (x, y-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                cv2.rectangle(overlay, (x, y), (x + tw, y + th), (0, 255, 0), 2)
+                cv2.putText(overlay, f"{score:.2f}", (x, y-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                 matches_data.append({"x": int(x), "y": int(y),
                                       "width": int(tw), "height": int(th),
                                       "score": float(score)})
@@ -520,6 +561,9 @@ class TemplateMatch(VisionTool):
                         break
                 cv2.rectangle(display, (x, y), (x + tw, y + th), (0, 255, 0), 2)
                 cv2.putText(display, f"{score:.2f} {angle:.0f}°", (x, y-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                cv2.rectangle(overlay, (x, y), (x + tw, y + th), (0, 255, 0), 2)
+                cv2.putText(overlay, f"{score:.2f} {angle:.0f}°", (x, y-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                 matches_data.append({"x": int(x), "y": int(y),
                                       "width": int(tw), "height": int(th),
@@ -556,10 +600,37 @@ class TemplateMatch(VisionTool):
         if mode == "rotation" and score_curve:
             result_data["score_curve"] = score_curve
 
+        # 使用完整帧作为 processed_image，确保下游步骤能访问完整图像
+        output_image = self._full_frame_image if self._full_frame_image is not None else img
+
+        # 在完整帧的对应位置绘制 overlay 标注
+        input_source = self.params.get("_input_source", "current")
+        if input_source.startswith("region:") and self._full_frame_image is not None:
+            overlay_full = np.zeros_like(self._full_frame_image)
+            region_name = input_source[7:]
+            if region_name in context.regions:
+                rx, ry, rw, rh = context.regions[region_name]
+                # 将 overlay 上的标注从 ROI 局部坐标平移到完整帧坐标
+                # 对于矩形标注，直接平移矩形左上角坐标
+                h_roi, w_roi = img.shape[:2]
+                # 重新在完整帧 overlay 上绘制
+                for md in matches_data:
+                    x0 = md["x"] + rx
+                    y0 = md["y"] + ry
+                    w0 = md.get("width", tw)
+                    h0 = md.get("height", th)
+                    score = md.get("score", 0)
+                    cv2.rectangle(overlay_full, (x0, y0), (x0 + w0, y0 + h0), (0, 255, 0), 2)
+                    cv2.putText(overlay_full, f"{score:.2f}", (x0, y0-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            overlay = overlay_full
+        # feature 模式下 display 已被替换为特征匹配结果图，不覆盖 overlay
+
         return ToolResult(
             success=True,
             passed=passed,
-            processed_image=display,
+            processed_image=output_image,
+            overlay_image=overlay,
             data=result_data,
             message=f"找到 {len(matches_data)} 个匹配 (得分={best_score:.3f})"
         )
@@ -738,6 +809,7 @@ class EdgeMatch(VisionTool):
         min_area = float(self.params.get("min_area", 100))
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         matches = []
 
         for contour in contours:
@@ -757,6 +829,10 @@ class EdgeMatch(VisionTool):
                 cv2.rectangle(display, (x, y), (x + w, y + h), (255, 0, 0), 1)
                 cv2.putText(display, f"{match_value:.3f}", (x, y-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                cv2.drawContours(overlay, [contour], -1, (0, 255, 0), 2)
+                cv2.rectangle(overlay, (x, y), (x + w, y + h), (255, 0, 0), 1)
+                cv2.putText(overlay, f"{match_value:.3f}", (x, y-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                 matches.append({
                     "x": int(x), "y": int(y),
                     "width": int(w), "height": int(h),
@@ -765,10 +841,32 @@ class EdgeMatch(VisionTool):
 
         passed = len(matches) > 0
 
+        # 使用完整帧作为 processed_image，确保下游步骤能访问完整图像
+        output_image = self._full_frame_image if self._full_frame_image is not None else img
+
+        # 在完整帧的对应位置绘制 overlay 标注
+        input_source = self.params.get("_input_source", "current")
+        if input_source.startswith("region:") and self._full_frame_image is not None:
+            overlay_full = np.zeros_like(self._full_frame_image)
+            region_name = input_source[7:]
+            if region_name in context.regions:
+                rx, ry, rw, rh = context.regions[region_name]
+                # 将轮廓坐标从 ROI 局部坐标平移到完整帧坐标
+                for m in matches:
+                    x0 = m["x"] + rx
+                    y0 = m["y"] + ry
+                    w0 = m["width"]
+                    h0 = m["height"]
+                    cv2.rectangle(overlay_full, (x0, y0), (x0 + w0, y0 + h0), (255, 0, 0), 1)
+                    cv2.putText(overlay_full, f"{m['match_value']:.3f}", (x0, y0-5),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            overlay = overlay_full
+
         return ToolResult(
             success=True,
             passed=passed,
-            processed_image=display,
+            processed_image=output_image,
+            overlay_image=overlay,
             data={
                 "match_count": len(matches),
                 "matches": matches,
@@ -922,17 +1020,39 @@ class FastMatch(VisionTool):
             x, y, w, h = 0, 0, 0, 0
 
         display = img.copy()
+        overlay = np.zeros_like(img)
         passed = best_score >= threshold
 
         if passed:
             cv2.rectangle(display, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(display, f"{best_score:.2f}", (x, y-5),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(overlay, f"{best_score:.2f}", (x, y-5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+        # 使用完整帧作为 processed_image，确保下游步骤能访问完整图像
+        output_image = self._full_frame_image if self._full_frame_image is not None else img
+
+        # 在完整帧的对应位置绘制 overlay 标注
+        input_source = self.params.get("_input_source", "current")
+        if input_source.startswith("region:") and self._full_frame_image is not None and passed:
+            overlay_full = np.zeros_like(self._full_frame_image)
+            region_name = input_source[7:]
+            if region_name in context.regions:
+                rx, ry, rw, rh = context.regions[region_name]
+                x0 = x + rx
+                y0 = y + ry
+                cv2.rectangle(overlay_full, (x0, y0), (x0 + w, y0 + h), (0, 255, 0), 2)
+                cv2.putText(overlay_full, f"{best_score:.2f}", (x0, y0-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            overlay = overlay_full
 
         return ToolResult(
             success=True,
             passed=passed,
-            processed_image=display,
+            processed_image=output_image,
+            overlay_image=overlay,
             data={
                 "score": float(best_score),
                 "x": int(x), "y": int(y),
