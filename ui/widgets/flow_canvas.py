@@ -36,12 +36,18 @@ class FlowCanvas(QWidget):
     def add_node_from_tool(self, tool_name: str, category: str = "",
                            params: Optional[Dict] = None,
                            enabled: bool = True):
+        # 先找已有空 slot
         for slot in self._slot_widget._slots:
             if slot.is_empty():
                 slot.set_operator(tool_name, category, params or {}, enabled)
                 self._slot_widget._update_counts()
                 self.pipeline_changed.emit()
                 return
+        # 所有 slot 都被占用，追加新 slot
+        self._slot_widget._add_slot()
+        self._slot_widget._slots[-1].set_operator(tool_name, category, params or {}, enabled)
+        self._slot_widget._update_counts()
+        self.pipeline_changed.emit()
 
     def clear_all(self):
         self._slot_widget.clear_all()

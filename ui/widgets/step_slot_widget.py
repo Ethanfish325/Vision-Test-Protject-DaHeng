@@ -86,18 +86,20 @@ class StepSlot(QFrame):
         self._delete_btn.setCursor(QCursor(Qt.PointingHandCursor))
         self._delete_btn.setStyleSheet("""
             QPushButton {
-                background: transparent;
-                border: none;
+                background: #4a2020;
+                border: 1px solid #ff5252;
                 color: #ff5252;
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: bold;
                 border-radius: 16px;
             }
             QPushButton:hover {
-                background: #4a2020;
+                background: #5a2a2a;
+                color: #ff7070;
+                border-color: #ff7070;
             }
             QPushButton:pressed {
-                background: #5a2a2a;
+                background: #6a3a3a;
             }
         """)
         self._delete_btn.setText("✕")
@@ -127,18 +129,16 @@ class StepSlot(QFrame):
 
     def _update_occupied_style(self):
         color = CATEGORY_COLORS_Q.get(self._category, QColor("#333"))
-        light_color = CATEGORY_LIGHT_Q.get(self._category, QColor("#f5f5f5"))
         border_color = color.name()
-        bg_name = light_color.name()
         
         self.setStyleSheet(f"""
             StepSlot {{
-                background: {bg_name};
+                background: #2d2d2d;
                 border: 2px solid {border_color};
                 border-radius: 10px;
             }}
             StepSlot:hover {{
-                background: {QColor(light_color).lighter(110).name()};
+                background: #353535;
                 border-color: {QColor(color).lighter(120).name()};
             }}
         """)
@@ -224,7 +224,7 @@ class StepSlot(QFrame):
                 QPushButton {
                     background: #4CAF50;
                     color: white;
-                    border: none;
+                    border: 1px solid #66BB6A;
                     border-radius: 16px;
                     font-size: 16px;
                     font-weight: bold;
@@ -240,19 +240,19 @@ class StepSlot(QFrame):
             self._enable_btn.setText("○")
             self._enable_btn.setStyleSheet("""
                 QPushButton {
-                    background: #3c3c3c;
-                    color: #888;
-                    border: none;
+                    background: #555;
+                    color: #ccc;
+                    border: 1px solid #777;
                     border-radius: 16px;
                     font-size: 16px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background: #4a4a4a;
-                    color: #aaa;
+                    background: #666;
+                    color: #fff;
                 }
                 QPushButton:pressed {
-                    background: #555;
+                    background: #777;
                 }
             """)
 
@@ -416,6 +416,32 @@ class StepSlotWidget(QWidget):
         """)
         header_layout.addWidget(header)
         header_layout.addStretch()
+
+        # 添加步骤按钮
+        self._btn_add_step = QPushButton("+ 添加步骤")
+        self._btn_add_step.setFixedHeight(32)
+        self._btn_add_step.setCursor(QCursor(Qt.PointingHandCursor))
+        self._btn_add_step.setStyleSheet("""
+            QPushButton {
+                background: #1a3a5c;
+                color: #4A90D9;
+                border: 1px solid #2a5a8c;
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 2px 12px;
+            }
+            QPushButton:hover {
+                background: #2a4a7c;
+                color: #5AA0E9;
+            }
+            QPushButton:pressed {
+                background: #0a2a4c;
+            }
+        """)
+        self._btn_add_step.clicked.connect(self._on_add_step)
+        header_layout.addWidget(self._btn_add_step)
+
         layout.addLayout(header_layout)
 
         # 滚动区域
@@ -476,6 +502,16 @@ class StepSlotWidget(QWidget):
             else:
                 break
 
+    def _on_add_step(self):
+        """点击「添加步骤」按钮，在末尾追加一个空 slot"""
+        # 先确保末尾已有一个空 slot
+        if self._slots and not self._slots[-1]._is_occupied:
+            # 末尾已有空 slot，不需要操作
+            pass
+        else:
+            self._add_slot()
+        self.pipeline_changed.emit()
+
     def _on_operator_dropped(self, slot_index: int, tool_name: str, category: str,
                              params: dict):
         if slot_index < len(self._slots):
@@ -484,7 +520,9 @@ class StepSlotWidget(QWidget):
             self._add_slot()
             self._slots[-1].set_operator(tool_name, category, params)
 
-        if self._slots[-1]._is_occupied:
+        # 检查是否所有 slot 都被占用，如果是则追加一个新空 slot
+        all_occupied = all(s._is_occupied for s in self._slots)
+        if all_occupied:
             self._add_slot()
 
         self._remove_last_empty_slots()

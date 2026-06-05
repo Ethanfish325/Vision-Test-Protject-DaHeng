@@ -23,13 +23,13 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("视觉检测系统")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("2.0.0")
 
-    init_logger()
+    init_logger() 
     log_info("=== 视觉检测系统启动 ===")
 
     ensure_dirs()
-
+ 
     app.setStyleSheet("""
         QMainWindow {
             background-color: #1e1e1e;

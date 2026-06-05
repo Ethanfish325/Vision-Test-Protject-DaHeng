@@ -15,8 +15,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QFont, QIcon
 
-from camera_manager import CameraManager, PixelType_Gvsp_BayerRG8, PixelType_Gvsp_BayerGB8, \
-    PixelType_Gvsp_BayerBG8, PixelType_Gvsp_BayerGR8, PixelType_Gvsp_Mono8
+from camera_manager import CameraManager, raw_to_opencv
 from core.config_manager import ConfigManager
 from core.log_manager import log_info, log_error, log_warning
 from vision.vision_engine import VisionEngine
@@ -917,8 +916,12 @@ class MainWindow(QMainWindow):
         dialog.exec_()
 
     def _close_camera(self):
-        if hasattr(self, '_camera_panel') and self._camera_panel.is_camera_open():
-            self._camera_panel.close_camera()
+        try:
+            if hasattr(self, '_camera_panel') and self._camera_panel.is_camera_open():
+                self._camera_panel.close_camera()
+        except RuntimeError:
+            # Qt 对象已被删除，忽略
+            pass
         self.act_open_camera.setEnabled(True)
         self.act_close_camera.setEnabled(False)
         self.act_capture.setEnabled(False)
@@ -1000,15 +1003,13 @@ class MainWindow(QMainWindow):
             self.worker_display.setText(f"图像显示错误: {e}")
 
     def _convert_to_cv(self, width, height, pixel_type, img_bytes):
-        img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+        """将相机原始帧数据转换为 OpenCV BGR 图像"""
         try:
-            img = img_array.reshape((height, width))
-            if pixel_type in (PixelType_Gvsp_BayerRG8, PixelType_Gvsp_BayerGB8,
-                              PixelType_Gvsp_BayerBG8, PixelType_Gvsp_BayerGR8):
-                img = cv2.cvtColor(img, cv2.COLOR_BAYER_RG2BGR)
-            elif pixel_type == PixelType_Gvsp_Mono8:
-                img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-            else:
+            img = raw_to_opencv(img_bytes, width, height, pixel_type)
+            if img is None:
+                return np.zeros((height, width, 3), dtype=np.uint8)
+            # 确保是 3 通道 BGR
+            if len(img.shape) == 2:
                 img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
             return img
         except Exception as e:
@@ -1203,7 +1204,11 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         log_info("系统关闭")
-        if hasattr(self, '_camera_panel'):
-            self._camera_panel.close_camera()
+        try:
+            if hasattr(self, '_camera_panel'):
+                self._camera_panel.close_camera()
+        except RuntimeError:
+            # Qt 对象已被删除，忽略
+            pass
         CameraManager.finalize_sdk()
         event.accept()

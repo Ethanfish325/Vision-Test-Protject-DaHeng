@@ -43,6 +43,11 @@ class ParamConfigDialog(QDialog):
         self.setMinimumWidth(960)
         self.setMinimumHeight(600)
         self.resize(1200, 720)
+        # 防抖定时器：参数修改后延迟 300ms 自动预览
+        self._debounce_timer = QTimer(self)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(300)
+        self._debounce_timer.timeout.connect(self._update_preview)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -103,6 +108,7 @@ class ParamConfigDialog(QDialog):
                 row.addWidget(QLabel(label_text))
                 row.addWidget(widget, 1)
                 source_layout.addLayout(row)
+                self._connect_auto_preview(widget)
             right_layout.addWidget(source_group)
 
         scroll_area = QScrollArea()
@@ -170,6 +176,9 @@ class ParamConfigDialog(QDialog):
                 row.addWidget(widget, 1)
                 current_group_layout.addLayout(row)
 
+                # 为参数控件连接信号，实现修改后自动预览
+                self._connect_auto_preview(widget)
+
             finish_group()
         else:
             scroll_layout.addWidget(QLabel("该工具无需额外参数"))
@@ -200,6 +209,33 @@ class ParamConfigDialog(QDialog):
 
         if self.preview_image is not None:
             self._update_preview()
+
+    def _connect_auto_preview(self, widget):
+        """为参数控件连接信号，参数修改后自动触发防抖预览"""
+        from PyQt5.QtWidgets import (QSpinBox, QDoubleSpinBox, QComboBox,
+                                     QCheckBox, QLineEdit, QSlider)
+        # QSpinBox / QDoubleSpinBox
+        if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+            widget.valueChanged.connect(self._on_param_changed)
+        # QComboBox
+        elif isinstance(widget, QComboBox):
+            widget.currentIndexChanged.connect(self._on_param_changed)
+        # QCheckBox
+        elif isinstance(widget, QCheckBox):
+            widget.stateChanged.connect(self._on_param_changed)
+        # QLineEdit
+        elif isinstance(widget, QLineEdit):
+            widget.textChanged.connect(self._on_param_changed)
+        # QSlider
+        elif isinstance(widget, QSlider):
+            widget.valueChanged.connect(self._on_param_changed)
+        # 其他带 valueChanged 的控件
+        elif hasattr(widget, 'valueChanged'):
+            widget.valueChanged.connect(self._on_param_changed)
+
+    def _on_param_changed(self):
+        """参数变更时，重启防抖定时器"""
+        self._debounce_timer.start()
 
     def _update_preview(self):
         if self.preview_image is None:

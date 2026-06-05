@@ -1,40 +1,75 @@
 {
   "name": "默认方案",
-  "version": "1.0",
-  "created_at": "2026-06-02 10:57:55",
-  "author": "",
-  "judge_logic": "AND",
   "steps": [
     {
-      "tool_type": "多区域ROI",
-      "display_name": "多区域ROI",
+      "tool_type": "MultiROI",
       "params": {
         "input_source": "原始图像",
         "regions": [
           {
-            "name": "区域1",
-            "x": 446,
-            "y": 88,
-            "width": 781,
-            "height": 781,
+            "name": "标签1",
+            "x": 2001,
+            "y": 629,
+            "width": 346,
+            "height": 712,
             "enabled": true
           },
           {
-            "name": "区域2",
-            "x": 615,
-            "y": 935,
-            "width": 456,
-            "height": 344,
+            "name": "标签2",
+            "x": 988,
+            "y": 576,
+            "width": 356,
+            "height": 717,
+            "enabled": true
+          },
+          {
+            "name": "标签3",
+            "x": 86,
+            "y": 548,
+            "width": 331,
+            "height": 745,
+            "enabled": true
+          },
+          {
+            "name": "脚垫1",
+            "x": 43,
+            "y": 163,
+            "width": 249,
+            "height": 274,
+            "enabled": true
+          },
+          {
+            "name": "脚垫2",
+            "x": 2649,
+            "y": 177,
+            "width": 255,
+            "height": 337,
+            "enabled": true
+          },
+          {
+            "name": "脚垫3",
+            "x": 2611,
+            "y": 1384,
+            "width": 249,
+            "height": 269,
+            "enabled": true
+          },
+          {
+            "name": "脚垫4",
+            "x": 0,
+            "y": 1379,
+            "width": 254,
+            "height": 289,
             "enabled": true
           }
-        ]
+        ],
+        "use_percentage": false
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "灰度化",
-      "display_name": "灰度化",
+      "tool_type": "Grayscale",
       "params": {
         "input_source": "区域:区域2",
         "method": "标准"
@@ -43,44 +78,50 @@
       "judge_rule": null
     },
     {
-      "tool_type": "Canny边缘检测",
-      "display_name": "Canny边缘检测",
+      "tool_type": "CannyEdge",
       "params": {
         "input_source": "上一个工具输出",
         "low_threshold": 50,
         "high_threshold": 150,
-        "aperture_size": 3
+        "aperture_size": 3,
+        "auto_threshold": false,
+        "l2_gradient": false
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "轮廓分析",
-      "display_name": "轮廓分析",
+      "tool_type": "ContourAnalysis",
       "params": {
         "input_source": "上一个工具输出",
         "min_area": 10,
         "max_area": 100000,
-        "draw_bbox": true
+        "draw_bbox": true,
+        "mode": 0,
+        "method": 2,
+        "sort_by": "area",
+        "sort_descending": true,
+        "max_count": 10,
+        "use_existing_binary": true
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "面积测量",
-      "display_name": "面积测量",
+      "tool_type": "AreaMeasure",
       "params": {
         "input_source": "上一个工具输出",
         "min_area": 100,
         "max_area": 100000,
-        "unit": "像素"
+        "unit": "像素",
+        "pass_min": 0,
+        "pass_max": 1000000
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "逻辑判断",
-      "display_name": "逻辑判断",
+      "tool_type": "LogicJudge",
       "params": {
         "input_source": "原始图像",
         "judge_type": "数值范围判断",
@@ -90,14 +131,17 @@
         "compare_type": "大于",
         "compare_value": 0.0,
         "ok_message": "OK",
-        "ng_message": "NG"
+        "ng_message": "NG",
+        "judge_mode": "expression",
+        "expression": "AND(area>100, distance<50)",
+        "conditions": [],
+        "logic_type": "and"
       },
       "enabled": true,
       "judge_rule": null
     },
     {
-      "tool_type": "模板匹配",
-      "display_name": "模板匹配",
+      "tool_type": "TemplateMatch",
       "params": {
         "input_source": "上一个工具输出",
         "method": "TM_CCOEFF_NORMED",
@@ -112,7 +156,14 @@
         "enable_feature_match": false,
         "feature_method": "SIFT",
         "feature_min_matches": 10,
-        "feature_ratio_thresh": 0.75
+        "feature_ratio_thresh": 0.75,
+        "mode": "standard",
+        "template_data": null,
+        "feature_mode": "sift",
+        "min_matches": 10,
+        "nms_distance": 20,
+        "use_mask": false,
+        "mask_path": ""
       },
       "enabled": true,
       "judge_rule": null
