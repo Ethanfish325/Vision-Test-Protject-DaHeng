@@ -34,7 +34,7 @@ GUI框架: PyQt5
    - 特征提取（7种）：Canny边缘检测（支持自动Otsu阈值）、阈值分割（集成传统阈值和自适应阈值两种模式）、轮廓分析（支持按面积/周长/x/y/宽/高排序）、Blob检测、轮廓过滤（支持AND/OR多条件逻辑）、直线检测（支持自动参数估计，HoughLinesP）、矩形检测
    - 几何检测（4种）：圆检测（支持自动参数估计，半径范围限制，圆心距去重）、直线检测(霍夫)（支持自动参数估计）、矩形检测(轮廓)、Blob检测(简单)（支持面积/圆度/凸度/惯性比过滤，颜色过滤，最大数量限制）
    - 测量（6种）：面积测量、距离测量、点测量、线测量、角度测量、目标计数
-   - 识别（4种）：颜色识别（支持HSV/Lab色彩空间切换，区域颜色占比分析）、模板匹配（支持掩膜，多角度分数曲线，特征点SIFT/ORB）、边缘匹配、快速匹配（图像金字塔）
+   - 识别（5种）：颜色识别（支持HSV/Lab色彩空间切换，区域颜色占比分析）、模板匹配（支持掩膜，多角度分数曲线，特征点SIFT/ORB）、边缘匹配、快速匹配（图像金字塔）、脚垫识别
    - 工具（3种）：坐标转换、数值计算、逻辑判断（支持表达式解析：AND(条件1, 条件2)，调试界面显示所有输入值）
 
 3. 方案管理
@@ -54,6 +54,7 @@ GUI框架: PyQt5
    - 设备枚举、打开/关闭、实时取流、单次拍照
    - 支持Bayer/Mono像素格式
    - 支持软触发采集
+   - GigE 网络优化（自动设置包大小）
 
 6. 结果记录
    - 自动保存检测结果（OK/NG）
@@ -68,6 +69,7 @@ GUI框架: PyQt5
    - 拖拽式流水线编辑
    - 参数配置对话框带实时预览
    - 多区域ROI可视化编辑器（支持命名、百分比坐标）
+   - 可缩放图片显示控件（支持鼠标滚轮缩放、拖拽平移、双击重置）
 
 --------
 目录结构
@@ -78,6 +80,7 @@ VisionTest/
 ├── main.spec                  # PyInstaller打包配置
 ├── requirements.txt           # Python依赖列表
 ├── ReadME.txt                 # 本说明文件
+├── cleanup_after_build.bat    # 打包后清理脚本
 │
 ├── core/                      # 核心模块
 │   ├── __init__.py
@@ -98,7 +101,8 @@ VisionTest/
 │       ├── param_config_dialog.py # 参数配置对话框（带实时预览）
 │       ├── pipeline_editor.py # 流水线编辑器
 │       ├── result_panel.py    # 结果显示面板
-│       └── step_slot_widget.py # 步骤插槽控件（支持拖拽排序）
+│       ├── step_slot_widget.py # 步骤插槽控件（支持拖拽排序）
+│       └── zoomable_label.py  # 可缩放图片显示控件
 │
 ├── vision/                    # 视觉算法模块
 │   ├── __init__.py
@@ -111,10 +115,19 @@ VisionTest/
 │       ├── feature_extract.py # 特征提取工具（7种）
 │       ├── geometry.py        # 几何检测工具（4种）
 │       ├── measure.py         # 测量工具（6种）
-│       ├── recognize.py       # 识别工具（4种）
+│       ├── recognize.py       # 识别工具（5种）
 │       └── utility.py         # 辅助工具（3种）
 │
 ├── camera_manager.py          # 相机管理（硬件抽象层，海康威视SDK封装）
+│
+├── MvImport/                  # 海康威视 MVS SDK Python 接口
+│   ├── __init__.py
+│   ├── CameraParams_const.py
+│   ├── CameraParams_header.py
+│   ├── MvCameraControl_class.py
+│   ├── MvErrorDefine_const.py
+│   ├── MvISPErrorDefine_const.py
+│   └── PixelType_header.py
 │
 ├── data/                      # 运行时数据目录（自动创建）
 │   ├── users.json             # 用户数据
@@ -122,6 +135,16 @@ VisionTest/
 │   ├── schemes/               # 检测方案文件（JSON格式）
 │   ├── errors/                # NG数据（按日期分目录）
 │   └── logs/                  # 系统日志（按天轮转）
+│
+├── model/                     # 模型文件
+│   └── 1.png
+│
+├── plans/                     # 开发计划文档
+│   ├── architecture_optimization_plan.md
+│   ├── operator_optimization_plan.md
+│   ├── overlay_image_implementation_plan.md
+│   ├── tool_data_passing_architecture.md
+│   └── visual_pipeline_editor_plan.md
 │
 ├── build/                     # PyInstaller构建目录
 └── dist/                      # PyInstaller输出目录
@@ -136,7 +159,8 @@ VisionTest/
    pip install -r requirements.txt
 
 3. （可选）安装相机SDK：
-   将海康威视的 MvImport 目录复制到项目根目录
+   将海康威视的 MvImport 目录复制到项目根目录，
+   或设置环境变量 MVCAM_COMMON_RUNENV 指向 MVS SDK 安装路径
 
 4. 运行程序：
    python main.py
@@ -149,6 +173,9 @@ VisionTest/
     pyinstaller main.spec
 
 打包后的文件位于 dist/VisionSystem/ 目录下。
+
+打包完成后可运行 cleanup_after_build.bat 清理不需要的大文件
+（如 Qt5 的 WebEngine、QML 等 DLL 和多语言翻译文件）。
 
 --------
 使用说明
@@ -253,6 +280,7 @@ VisionTest/
     支持NMS非极大值抑制去重，分数阈值判定
   - 边缘匹配：基于边缘特征的模板匹配
   - 快速匹配：基于图像金字塔的快速匹配
+  - 脚垫识别：专用脚垫检测工具
 
 辅助工具：
   - 坐标转换：坐标系统转换（像素到物理单位）
@@ -317,6 +345,9 @@ v2.1.0 (2026-06-03)
 - 新增逻辑判断表达式解析模式（AND/OR语法）和调试界面
 - 新增ToolResult overlay_image字段支持工业叠加图层
 - 新增参数自动校正机制（核大小奇数、阈值大小关系、半径大小关系）
+- 新增可缩放图片显示控件（ZoomableLabel）
+- 新增脚垫识别工具（FootPadDetect）
+- 新增打包后清理脚本（cleanup_after_build.bat）
 - 优化参数配置对话框的实时预览交互
 - 改进算子工具箱的搜索和拖拽体验
 - 优化深色主题UI样式
