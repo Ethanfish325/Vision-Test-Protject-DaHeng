@@ -796,3 +796,107 @@ class ObjectCount(VisionTool):
         widgets.append(("合格上限:", pass_max))
 
         return widgets
+
+
+class BrightnessMeasure(VisionTool):
+    display_name = "亮度测量"
+
+    def __init__(self, params=None):
+        super().__init__(params)
+        self.params.setdefault("pass_min", 0)
+        self.params.setdefault("pass_max", 255)
+
+    def process(self, context: PipelineContext) -> ToolResult:
+        img = self._get_input_image(context)
+        if img is None:
+            return ToolResult(success=False, passed=False, message="无输入图像")
+
+        # 转为灰度图
+        if len(img.shape) == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img.copy()
+
+        # 计算亮度指标
+        mean_gray = float(np.mean(gray))
+        std_gray = float(np.std(gray))
+        min_gray = int(np.min(gray))
+        max_gray = int(np.max(gray))
+
+        # 合格判定（基于平均灰度值）
+        pass_min = float(self.params.get("pass_min", 0))
+        pass_max = float(self.params.get("pass_max", 255))
+        passed = pass_min <= mean_gray <= pass_max
+
+        # 构建显示图像
+        display = img.copy()
+        overlay = np.zeros_like(img)
+
+        # 在图像上标注亮度数据
+        info_lines = [
+            f"Mean: {mean_gray:.2f}",
+            f"Std:  {std_gray:.2f}",
+            f"Min:  {min_gray}",
+            f"Max:  {max_gray}",
+        ]
+        color = (0, 255, 0) if passed else (0, 0, 255)
+        for i, line in enumerate(info_lines):
+            y_pos = 30 + i * 30
+            cv2.putText(display, line, (10, y_pos),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            cv2.putText(overlay, line, (10, y_pos),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
+        # 使用完整帧作为 processed_image
+        output_image = self._full_frame_image if self._full_frame_image is not None else img
+
+        # ROI输入源时，将标注平移到完整帧坐标
+        input_source = self.params.get("_input_source", "current")
+        if input_source.startswith("region:") and self._full_frame_image is not None:
+            overlay_full = np.zeros_like(self._full_frame_image)
+            region_name = input_source[7:]
+            if region_name in context.regions:
+                rx, ry, rw, rh = context.regions[region_name]
+                for i, line in enumerate(info_lines):
+                    y_pos = 30 + i * 30
+                    cv2.putText(overlay_full, line, (10, y_pos),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            overlay = overlay_full
+
+        return ToolResult(
+            success=True,
+            passed=passed,
+            processed_image=output_image,
+            overlay_image=overlay,
+            data={
+                "mean_gray": mean_gray,
+                "std_gray": std_gray,
+                "min_gray": min_gray,
+                "max_gray": max_gray,
+            },
+            message=f"亮度: Mean={mean_gray:.2f}, Std={std_gray:.2f}, "
+                    f"Min={min_gray}, Max={max_gray}"
+        )
+
+    def get_param_widgets(self, parent):
+        from PyQt5.QtWidgets import QDoubleSpinBox, QHBoxLayout, QWidget, QLabel
+
+        widgets = []
+
+        pass_min = QDoubleSpinBox(parent)
+        pass_min.setRange(0, 255)
+        pass_min.setDecimals(1)
+        pass_min.setSingleStep(1)
+        pass_min.setValue(float(self.params.get("pass_min", 0)))
+        pass_min.valueChanged.connect(lambda v: self.params.update({"pass_min": v}))
+        widgets.append(("合格下限:", pass_min))
+
+        pass_max = QDoubleSpinBox(parent)
+        pass_max.setRange(0, 255)
+        pass_max.setDecimals(1)
+        pass_max.setSingleStep(1)
+        pass_max.setValue(float(self.params.get("pass_max", 255)))
+        pass_max.valueChanged.connect(lambda v: self.params.update({"pass_max": v}))
+        widgets.append(("合格上限:", pass_max))
+
+        return widgets

@@ -60,26 +60,63 @@ excluded_imports = [
     'jinja2',
 ]
 
+# ============================================================
 # MvImport 目录 - 海康威视相机 SDK
-# 如果目录存在则打包进去，否则跳过（工控机上需要手动放置）
+# ============================================================
+# 将 MvImport Python 模块作为 data 打包
 _mvimport_dir = 'MvImport'
+datas = []
+binaries = []
+
 if os.path.exists(_mvimport_dir):
-    datas = [(_mvimport_dir, _mvimport_dir)]
+    datas.append((_mvimport_dir, _mvimport_dir))
     print(f"[INFO] 找到 MvImport 目录，已加入打包数据")
 else:
-    datas = []
     print(f"[WARN] 未找到 MvImport 目录，相机功能将不可用")
     print(f"[WARN] 请从工控机拷贝 MvImport 目录到项目根目录后重新打包")
+
+# 查找 MVS Runtime 安装目录（64位）
+# MvCameraControl.dll 依赖大量其他 DLL（MVGigEVisionSDK.dll、MvUsb3vTL.dll 等），
+# 需要将整个 Runtime 目录的 DLL 都打包进去
+#
+# 注意：PyInstaller 的 pyimod03_ctypes.py 拦截了 WinDLL 调用，
+# 其 _frozen_name() 函数只在 sys._MEIPASS（即 _internal/）下搜索 DLL。
+# 因此 DLL 必须放在 _internal/ 根目录下，不能放在子目录中。
+_mvs_runtime_dirs = [
+    os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'),
+                 'Common Files', 'MVS', 'Runtime', 'Win64_x64'),
+    os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'),
+                 'Common Files', 'MVS', 'Runtime', 'Win64_x64'),
+]
+
+_mvs_runtime_dir = None
+for _dir in _mvs_runtime_dirs:
+    if os.path.isdir(_dir):
+        _mvs_runtime_dir = _dir
+        print(f"[INFO] 找到 MVS Runtime 目录: {_dir}")
+        break
+
+if _mvs_runtime_dir:
+    # 将 MVS Runtime 目录下所有 DLL 打包到 _internal/ 根目录（即 sys._MEIPASS）
+    # 这样 PyInstaller 的 _frozen_name() 就能找到它们
+    for _f in os.listdir(_mvs_runtime_dir):
+        if _f.lower().endswith('.dll'):
+            _src = os.path.join(_mvs_runtime_dir, _f)
+            binaries.append((_src, '.'))  # '.' 表示 _internal/ 根目录
+    print(f"[INFO] MVS Runtime DLL 已全部加入打包 binaries（到 _internal/ 根目录）")
+else:
+    print(f"[WARN] 未找到 MVS Runtime 目录，相机功能将不可用")
+    print(f"[WARN] 请安装海康威视 MVS SDK")
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['runtime_hook.py'],
     excludes=excluded_imports,
     noarchive=False,
 )

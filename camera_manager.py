@@ -31,16 +31,51 @@ from core.log_manager import log_error, log_info, log_warning
 
 
 # ============================================================
-#  SDK 导入与路径配置（严格遵循官方 DEMO 方式）
+#  SDK 导入与路径配置
 # ============================================================
-
-# 将 MVS Python SDK 的 MvImport 目录加入系统路径
+# 搜索顺序：
+#   1. 本地 MvImport 目录（打包后或开发环境项目目录下的）
+#   2. MVS 官方 SDK 安装目录（D:\MVS\Development\Samples\Python\MvImport）
+#
 # MvCameraControl_class.py 内部使用相对导入 (from PixelType_header import *)
 # 所以需要将 MvImport 目录本身加入 path
-MVS_MVIMPORT = os.path.join(os.getenv("MVCAM_COMMON_RUNENV", "D:\\MVS\\Development"),
-                            "Samples", "Python", "MvImport")
+# 同时 MvCameraControl_class.py 在模块加载时立即调用
+# check_sys_and_update_dll() -> WinDLL("MvCameraControl.dll")，
+# 因此还需要将 MvImport 目录设为当前工作目录，或将其加入 DLL 搜索路径。
+
+def _find_mvimport_dir() -> str:
+    """查找可用的 MvImport 目录"""
+    # 1. 检查本地项目目录下的 MvImport（打包后或开发环境）
+    local_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MvImport')
+    if os.path.isdir(local_dir):
+        return local_dir
+
+    # 2. 检查 MVS 官方 SDK 安装目录
+    mvs_dir = os.path.join(os.getenv("MVCAM_COMMON_RUNENV", "D:\\MVS\\Development"),
+                           "Samples", "Python", "MvImport")
+    if os.path.isdir(mvs_dir):
+        return mvs_dir
+
+    return local_dir  # 返回默认值，让 import 失败时走异常处理
+
+
+MVS_MVIMPORT = _find_mvimport_dir()
 if MVS_MVIMPORT not in sys.path:
     sys.path.insert(0, MVS_MVIMPORT)
+
+# 重要：将 MvImport 目录添加到 DLL 搜索路径
+# MvCameraControl_class.py 在模块加载时立即调用
+# check_sys_and_update_dll() -> WinDLL("MvCameraControl.dll")
+# 该 DLL 及其依赖的所有 DLL 都在 MvImport 目录下
+if os.path.isdir(MVS_MVIMPORT):
+    # Windows 7+ 支持 AddDllDirectory (KB2533623)
+    try:
+        import ctypes
+        # 使用 os.add_dll_directory (Python 3.8+, Windows 8.1+)
+        os.add_dll_directory(MVS_MVIMPORT)
+    except (AttributeError, OSError):
+        # 回退：将目录加入 PATH
+        os.environ['PATH'] = MVS_MVIMPORT + os.pathsep + os.environ.get('PATH', '')
 
 # 导入 SDK 模块
 try:

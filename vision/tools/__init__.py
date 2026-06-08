@@ -14,11 +14,11 @@ from .geometry import (
 )
 from .measure import (
     AreaMeasure, DistanceMeasure, PointMeasure,
-    LineMeasure, AngleMeasure, ObjectCount
+    LineMeasure, AngleMeasure, ObjectCount,
+    BrightnessMeasure
 )
 from .recognize import (
-    ColorRecognition, TemplateMatch, EdgeMatch, FastMatch,
-    FootPadDetect
+    ColorRecognition, TemplateMatch, EdgeMatch, FastMatch
 )
 from .utility import (
     CoordinateTransform, Calculator, LogicJudge
