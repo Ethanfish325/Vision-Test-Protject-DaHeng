@@ -43,9 +43,10 @@ class SerialDialog(QDialog):
     # 配置前缀
     CONFIG_PREFIX = "serial_comm"
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, comm_mgr: Optional[SerialCommManager] = None):
         super().__init__(parent)
-        self._comm_mgr = SerialCommManager()
+        self._external_comm = comm_mgr is not None  # 标记是否为外部传入的 comm_mgr
+        self._comm_mgr = comm_mgr or SerialCommManager()
         self._config_mgr = ConfigManager()
 
         self._setup_ui()
@@ -604,12 +605,14 @@ class SerialDialog(QDialog):
 
     def closeEvent(self, event):
         """窗口关闭时自动断开串口连接。"""
-        self._comm_mgr.cleanup()
+        if not self._external_comm:
+            self._comm_mgr.cleanup()
         log_info("串口通信窗口关闭")
         super().closeEvent(event)
 
     def reject(self):
         """点击关闭按钮或按 ESC 时。"""
-        self._comm_mgr.cleanup()
+        if not self._external_comm:
+            self._comm_mgr.cleanup()
         log_info("串口通信窗口关闭")
         super().reject()

@@ -52,11 +52,18 @@ class ZoomableLabel(QLabel):
         """)
 
     def set_pixmap(self, pixmap: QPixmap):
-        """设置显示的图片"""
+        """设置显示的图片（重置缩放状态）"""
         self._pixmap = pixmap
         self._fit_to_widget = True
         self._zoom = 1.0
         self._offset = QPoint(0, 0)
+        self._update_display()
+
+    def update_pixmap(self, pixmap: QPixmap):
+        """更新图片内容，保持当前缩放和平移状态不变"""
+        if pixmap is None:
+            return
+        self._pixmap = pixmap
         self._update_display()
 
     def set_image(self, qimage: QImage):
@@ -281,6 +288,10 @@ class ZoomableImageWidget(QWidget):
 
     def set_pixmap(self, pixmap: QPixmap):
         self.label.set_pixmap(pixmap)
+
+    def update_pixmap(self, pixmap: QPixmap):
+        """更新图片内容，保持当前缩放和平移状态不变"""
+        self.label.update_pixmap(pixmap)
 
     def set_image(self, qimage: QImage):
         self.label.set_image(qimage)

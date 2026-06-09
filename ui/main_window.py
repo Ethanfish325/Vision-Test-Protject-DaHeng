@@ -10,13 +10,14 @@ import cv2
 import numpy as np
 import json
 from datetime import datetime
+from typing import Optional
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QFont, QIcon
 
 from camera_manager import CameraManager, raw_to_opencv
-from .widgets.zoomable_label import ZoomableLabel
+from .widgets.zoomable_label import ZoomableLabel, ZoomableImageWidget
 from core.config_manager import ConfigManager
 from core.log_manager import log_info, log_error, log_warning
 from vision.vision_engine import VisionEngine
@@ -26,6 +27,9 @@ from .widgets.camera_panel import CameraPanel
 from core.paths import SCHEME_DIR
 from .widgets.pipeline_editor import PipelineEditor
 from .widgets.result_panel import ResultPanel
+
+from core.serial_comm import SerialCommManager
+from core.serial_test_workflow import SerialTestWorkflow, WorkflowConfig
 
 
 class StepLogPanel(QWidget):
@@ -104,6 +108,10 @@ class MainWindow(QMainWindow):
         self._camera_panel = None      # 相机面板，延迟创建
         self._pending_engineer_test = False  # 工程师模式测试标记：拍照后自动执行流水线
         self._pending_detect = False    # 生产模式标记：拍照后自动执行检测
+
+        # 串口通信与自动测试
+        self._serial_comm: Optional[SerialCommManager] = None
+        self._serial_workflow: Optional[SerialTestWorkflow] = None
 
         self._setup_ui()
         self._load_schemes()
@@ -258,9 +266,9 @@ class MainWindow(QMainWindow):
         image_title = QLabel("检测画面")
         image_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #d4d4d4; padding: 2px 0;")
 
-        self.worker_display = ZoomableLabel("请加载图像或点击「开始检测」")
+        self.worker_display = ZoomableImageWidget("请加载图像或点击「开始检测」")
         self.worker_display.setMinimumSize(640, 480)
-        self.worker_display.setStyleSheet("""
+        self.worker_display.label.setStyleSheet("""
             ZoomableLabel {
                 background-color: #0d0d0d; border: 2px solid #444;
                 border-radius: 4px;
@@ -312,6 +320,27 @@ class MainWindow(QMainWindow):
         """)
 
         btn_layout.addWidget(self.worker_btn_detect)
+
+        # ── 串口自动测试按钮 ──
+        self.worker_btn_auto_test = QPushButton("🔌 启动自动测试")
+        self.worker_btn_auto_test.setMinimumHeight(48)
+        self.worker_btn_auto_test.setEnabled(False)
+        self.worker_btn_auto_test.setCheckable(True)
+        self.worker_btn_auto_test.setStyleSheet("""
+            QPushButton {
+                background-color: #E65100; color: #fff; font-size: 18px;
+                font-weight: bold; padding: 6px 16px;
+                border: 2px solid #FF6D00; border-radius: 8px;
+            }
+            QPushButton:hover { background-color: #BF360C; border-color: #FF9100; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
+            QPushButton:checked {
+                background-color: #C62828; color: #fff;
+                border: 2px solid #EF5350;
+            }
+        """)
+        self.worker_btn_auto_test.setToolTip("通过串口接收下位机信号自动触发拍照检测")
+        btn_layout.addWidget(self.worker_btn_auto_test)
 
         scheme_group = QWidget()
         scheme_group.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 4px;")
@@ -374,6 +403,7 @@ class MainWindow(QMainWindow):
 
         self.worker_btn_detect.clicked.connect(self._do_detect)
         self.worker_btn_import_scheme.clicked.connect(self._import_worker_scheme)
+        self.worker_btn_auto_test.clicked.connect(self._toggle_auto_test)
 
         self.stack.addWidget(page)
 
@@ -421,6 +451,7 @@ class MainWindow(QMainWindow):
 
         log_info(f"生产模式导入方案: {name}")
         QMessageBox.information(self, "成功", f"方案「{name}」已导入并应用")
+        self._update_auto_test_btn_state()
 
     def _build_engineer_page(self):
         page = QWidget()
@@ -556,9 +587,9 @@ class MainWindow(QMainWindow):
         step_nav_layout.addWidget(self.eng_step_label, 1)
         step_nav_layout.addWidget(self.eng_btn_next_step)
 
-        self.eng_test_display = ZoomableLabel("点击「测试」按钮拍照并执行流水线")
+        self.eng_test_display = ZoomableImageWidget("点击「测试」按钮拍照并执行流水线")
         self.eng_test_display.setMinimumSize(320, 240)
-        self.eng_test_display.setStyleSheet("""
+        self.eng_test_display.label.setStyleSheet("""
             ZoomableLabel {
                 background-color: #0d0d0d; border: 1px solid #444;
                 border-radius: 4px;
@@ -1004,7 +1035,7 @@ class MainWindow(QMainWindow):
         self.act_capture.setEnabled(False)
         self.worker_btn_detect.setEnabled(False)
         self.worker_display.clear_pixmap()
-        self.worker_display.setText("相机已关闭")
+        self.worker_display.label.setText("相机已关闭")
         self._raw_image = None
         self.status_label.setText("相机已关闭")
 
@@ -1055,6 +1086,12 @@ class MainWindow(QMainWindow):
         self.status_label.setText("拍照完成，可开始检测")
         self.worker_status_label.setText("拍照完成，可开始检测")
 
+        # 串口自动测试工作流模式：将图像传递给工作流
+        if (self._serial_workflow is not None
+                and self._serial_workflow.is_running):
+            self._serial_workflow.on_capture_completed(self._raw_image)
+            return
+
         # 工程师模式测试：拍照后自动执行流水线
         if self._pending_engineer_test:
             self._pending_engineer_test = False
@@ -1083,10 +1120,10 @@ class MainWindow(QMainWindow):
             return
         try:
             pix = self._cv_to_pixmap(cv_img)
-            self.worker_display.set_pixmap(pix)
-            self.eng_test_display.set_pixmap(pix)
+            self.worker_display.update_pixmap(pix)
+            self.eng_test_display.update_pixmap(pix)
         except Exception as e:
-            self.worker_display.setText(f"图像显示错误: {e}")
+            self.worker_display.label.setText(f"图像显示错误: {e}")
 
     def _show_worker_image(self, cv_img):
         """Worker 模式：显示原始图像 + 标注叠加（仅更新 worker_display）"""
@@ -1094,9 +1131,9 @@ class MainWindow(QMainWindow):
             return
         try:
             pix = self._cv_to_pixmap(cv_img)
-            self.worker_display.set_pixmap(pix)
+            self.worker_display.update_pixmap(pix)
         except Exception as e:
-            self.worker_display.setText(f"图像显示错误: {e}")
+            self.worker_display.label.setText(f"图像显示错误: {e}")
 
     def _show_engineer_image(self, cv_img):
         """Engineer 模式：显示原始图像 + 标注叠加（仅更新 eng_test_display）"""
@@ -1104,9 +1141,9 @@ class MainWindow(QMainWindow):
             return
         try:
             pix = self._cv_to_pixmap(cv_img)
-            self.eng_test_display.set_pixmap(pix)
+            self.eng_test_display.update_pixmap(pix)
         except Exception as e:
-            self.eng_test_display.setText(f"图像显示错误: {e}")
+            self.eng_test_display.label.setText(f"图像显示错误: {e}")
 
     # ────────── 步骤导航 ──────────
 
@@ -1382,13 +1419,196 @@ class MainWindow(QMainWindow):
                           "<p>支持流水线式视觉工具链设计</p>")
 
     def _open_serial_dialog(self):
-        """打开串口通信窗口。"""
+        """打开串口通信窗口（共享 SerialCommManager 实例）。"""
         from .widgets.serial_dialog import SerialDialog
-        dialog = SerialDialog(self)
+        if self._serial_comm is None:
+            self._serial_comm = SerialCommManager()
+        dialog = SerialDialog(self, comm_mgr=self._serial_comm)
         dialog.exec_()
+        # 对话框关闭后，根据串口状态更新自动测试按钮
+        self._update_auto_test_btn_state()
+
+    # ──────────────────────────────────────────────
+    # 串口自动测试工作流
+    # ──────────────────────────────────────────────
+
+    def _update_auto_test_btn_state(self):
+        """根据串口和方案状态更新自动测试按钮。"""
+        comm_ok = (self._serial_comm is not None and self._serial_comm.is_open)
+        pipeline_ok = (self.vision_engine.pipeline is not None)
+        workflow_running = (self._serial_workflow is not None
+                            and self._serial_workflow.is_running)
+
+        if workflow_running:
+            self.worker_btn_auto_test.setEnabled(True)
+        else:
+            self.worker_btn_auto_test.setEnabled(comm_ok and pipeline_ok)
+
+    def _toggle_auto_test(self, checked: bool):
+        """切换自动测试状态。"""
+        if checked:
+            self._start_auto_test()
+        else:
+            self._stop_auto_test()
+
+    def _start_auto_test(self):
+        """启动串口自动测试工作流。"""
+        # 检查串口
+        if self._serial_comm is None or not self._serial_comm.is_open:
+            QMessageBox.warning(self, "提示",
+                                "请先通过「通信 > 串口通信」打开串口连接")
+            self.worker_btn_auto_test.setChecked(False)
+            return
+
+        # 检查方案
+        if self.vision_engine.pipeline is None:
+            QMessageBox.warning(self, "提示", "请先导入检测方案")
+            self.worker_btn_auto_test.setChecked(False)
+            return
+
+        # 创建并启动工作流
+        self._serial_workflow = SerialTestWorkflow(
+            comm_mgr=self._serial_comm,
+            config=WorkflowConfig(),
+            parent=self,
+        )
+
+        # 连接信号
+        self._serial_workflow.state_changed.connect(
+            self._on_workflow_state_changed)
+        self._serial_workflow.capture_requested.connect(
+            self._on_workflow_capture_requested)
+        self._serial_workflow.test_requested.connect(
+            self._on_workflow_test_requested)
+        self._serial_workflow.error_occurred.connect(
+            self._on_workflow_error)
+
+        # 启动
+        self._serial_workflow.start()
+
+        # 更新 UI
+        self.worker_btn_auto_test.setText("⏹ 停止自动测试")
+        self.worker_btn_detect.setEnabled(False)
+        self.status_label.setText("自动测试已启动 - 等待触发信号...")
+        self.worker_status_label.setText("自动测试已启动 - 等待触发信号...")
+        log_info("串口自动测试工作流已启动")
+
+    def _stop_auto_test(self):
+        """停止串口自动测试工作流。"""
+        if self._serial_workflow:
+            self._serial_workflow.stop()
+            self._serial_workflow.cleanup()
+            self._serial_workflow = None
+
+        self.worker_btn_auto_test.setText("🔌 启动自动测试")
+        self.worker_btn_auto_test.setChecked(False)
+        self.worker_btn_detect.setEnabled(
+            self._raw_image is not None
+            and self.vision_engine.pipeline is not None
+        )
+        self.status_label.setText("自动测试已停止")
+        self.worker_status_label.setText("自动测试已停止")
+        log_info("串口自动测试工作流已停止")
+
+    def _on_workflow_state_changed(self, state):
+        """工作流状态变化时更新 UI。"""
+        state_names = {
+            SerialTestWorkflow.State.IDLE: "空闲",
+            SerialTestWorkflow.State.WAITING_TRIGGER: "等待触发信号...",
+            SerialTestWorkflow.State.CAPTURING: "拍照中...",
+            SerialTestWorkflow.State.TESTING: "检测中...",
+            SerialTestWorkflow.State.SENDING_RESULT: "发送结果...",
+        }
+        name = state_names.get(state, str(state))
+        self.worker_status_label.setText(f"自动测试: {name}")
+        self.status_label.setText(f"自动测试: {name}")
+
+    def _on_workflow_capture_requested(self):
+        """工作流请求拍照。"""
+        if self._camera_panel is not None and self._camera_panel.is_camera_open():
+            self._capture()
+        else:
+            self._serial_workflow.on_capture_completed(None)
+
+    def _on_workflow_test_requested(self, image):
+        """工作流请求执行检测。"""
+        if self.vision_engine.pipeline is None:
+            self._serial_workflow.on_test_completed(False, "未设置检测方案")
+            return
+
+        try:
+            scheme_name = self._current_scheme_name or "未命名"
+            passed, message, annotated = self.vision_engine.execute(
+                image, scheme_name=scheme_name
+            )
+
+            # 更新显示
+            if annotated is not None:
+                self._show_worker_image(annotated)
+
+            # 更新 OK/NG 判断
+            if passed:
+                self.worker_judge.setText("✓ OK")
+                self.worker_judge.setStyleSheet("""
+                    font-size: 32px; font-weight: bold; padding: 6px 28px;
+                    background-color: #E8F5E9; color: #2E7D32;
+                    border: 2px solid #4CAF50; border-radius: 6px;
+                    min-width: 160px;
+                """)
+            else:
+                self.worker_judge.setText("✗ NG")
+                self.worker_judge.setStyleSheet("""
+                    font-size: 32px; font-weight: bold; padding: 6px 28px;
+                    background-color: #FFEBEE; color: #C62828;
+                    border: 2px solid #EF5350; border-radius: 6px;
+                    min-width: 160px;
+                """)
+
+            # 记录日志
+            results = self.vision_engine.get_last_results()
+            self.worker_log.clear_log()
+            self.worker_log.append_info(
+                f"══════ 自动测试触发 #{self._serial_workflow.trigger_count} ══════",
+                "#4fc3f7")
+            for i, r in enumerate(results):
+                ts = datetime.now().strftime("%H:%M:%S")
+                status = "✓" if r.passed else "✗"
+                self.worker_log.append_log(
+                    ts, i + 1, r.tool_type, status,
+                    r.message, r.elapsed_ms)
+            self.worker_log.append_separator()
+            total_ms = sum(r.elapsed_ms for r in results)
+            if passed:
+                self.worker_log.append_info(
+                    f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
+            else:
+                self.worker_log.append_info(
+                    f"✗ 检测不通过 (NG) | 总耗时: {total_ms:.1f}ms", "#ff5252")
+
+            # 回调工作流
+            self._serial_workflow.on_test_completed(passed, message)
+
+        except Exception as e:
+            log_error(f"自动测试检测异常: {e}")
+            self._serial_workflow.on_test_completed(False, str(e))
+
+    def _on_workflow_error(self, error_msg: str):
+        """工作流错误处理。"""
+        self.worker_status_label.setText(f"自动测试错误: {error_msg}")
+        self.status_label.setText(f"自动测试错误: {error_msg}")
+        log_error(f"自动测试错误: {error_msg}")
 
     def closeEvent(self, event):
         log_info("系统关闭")
+        # 停止自动测试工作流
+        if self._serial_workflow is not None:
+            self._serial_workflow.stop()
+            self._serial_workflow.cleanup()
+            self._serial_workflow = None
+        # 关闭串口
+        if self._serial_comm is not None:
+            self._serial_comm.cleanup()
+            self._serial_comm = None
         try:
             if self._camera_panel is not None:
                 self._camera_panel.close_camera()
