@@ -2,6 +2,7 @@
 PyQt5>=5.15.0
 opencv-python>=4.5.0
 numpy>=1.21.0
+pyserial>=3.5
 
 # 可选扩展（后续添加）
 # pyzbar>=0.1.9        # 二维码/条形码识别

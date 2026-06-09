@@ -651,6 +651,11 @@ class MainWindow(QMainWindow):
         scheme_menu.addAction(self.act_import_scheme)
         scheme_menu.addAction(self.act_export_scheme)
 
+        comm_menu = menubar.addMenu("通信")
+        self.act_serial_comm = QAction("串口通信", self)
+        self.act_serial_comm.triggered.connect(self._open_serial_dialog)
+        comm_menu.addAction(self.act_serial_comm)
+
         view_menu = menubar.addMenu("视图")
         self.act_switch_worker = QAction("生产模式", self)
         self.act_switch_worker.triggered.connect(lambda: self._switch_mode(0))
@@ -1375,6 +1380,12 @@ class MainWindow(QMainWindow):
                           "<p>版本: 2.0</p>"
                           "<p>基于 OpenCV + PyQt5 的视觉识别系统</p>"
                           "<p>支持流水线式视觉工具链设计</p>")
+
+    def _open_serial_dialog(self):
+        """打开串口通信窗口。"""
+        from .widgets.serial_dialog import SerialDialog
+        dialog = SerialDialog(self)
+        dialog.exec_()
 
     def closeEvent(self, event):
         log_info("系统关闭")
