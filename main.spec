@@ -61,12 +61,40 @@ excluded_imports = [
 ]
 
 # ============================================================
+# 数据目录打包
+# ============================================================
+datas = []
+binaries = []
+
+# --- model/ 目录（模板匹配图片） ---
+_model_dir = 'model'
+if os.path.exists(_model_dir):
+    for _root, _dirs, _files in os.walk(_model_dir):
+        for _f in _files:
+            _src = os.path.join(_root, _f)
+            _dst = os.path.relpath(_root, '.')
+            datas.append((_src, _dst))
+    print(f"[INFO] model/ 目录已加入打包数据")
+else:
+    print(f"[WARN] 未找到 model/ 目录")
+
+# --- data/ 目录（配置文件、用户数据等） ---
+_data_dir = 'data'
+if os.path.exists(_data_dir):
+    for _root, _dirs, _files in os.walk(_data_dir):
+        for _f in _files:
+            _src = os.path.join(_root, _f)
+            _dst = os.path.relpath(_root, '.')
+            datas.append((_src, _dst))
+    print(f"[INFO] data/ 目录已加入打包数据")
+else:
+    print(f"[WARN] 未找到 data/ 目录")
+
+# ============================================================
 # MvImport 目录 - 海康威视相机 SDK
 # ============================================================
 # 将 MvImport Python 模块作为 data 打包
 _mvimport_dir = 'MvImport'
-datas = []
-binaries = []
 
 if os.path.exists(_mvimport_dir):
     datas.append((_mvimport_dir, _mvimport_dir))
@@ -142,7 +170,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='data/icon.png',
 )
 
 coll = COLLECT(
@@ -154,6 +182,20 @@ coll = COLLECT(
     upx_exclude=[],
     name='VisionSystem',
 )
+
+# ============================================================
+# 后处理：删除顶层多余的独立 exe（只保留目录模式）
+# ============================================================
+# EXE() 会生成 dist/VisionSystem.exe（单文件），
+# COLLECT() 会生成 dist/VisionSystem/VisionSystem.exe（目录模式）。
+# 删除顶层的单文件 exe，避免两个 exe 并存。
+_TOP_LEVEL_EXE = os.path.join('dist', 'VisionSystem.exe')
+if os.path.exists(_TOP_LEVEL_EXE):
+    try:
+        os.remove(_TOP_LEVEL_EXE)
+        print(f"[后处理] 已删除顶层独立 exe: {_TOP_LEVEL_EXE}")
+    except Exception as e:
+        print(f"[后处理] 删除顶层 exe 失败: {e}")
 
 # ============================================================
 # 后处理：删除不需要的大体积 DLL 文件（可安全删除，项目未使用）

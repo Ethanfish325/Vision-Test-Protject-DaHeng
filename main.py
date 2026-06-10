@@ -6,9 +6,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt5.QtWidgets import QApplication
+from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 
-from core.paths import ensure_dirs
+from core.paths import ensure_dirs, ICON_FILE
 from core.log_manager import init_logger, log_info
 from ui.main_window import MainWindow
 
@@ -24,6 +25,10 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("视觉检测系统")
     app.setApplicationVersion("2.0.0")
+
+    # 设置应用图标
+    if os.path.exists(ICON_FILE):
+        app.setWindowIcon(QIcon(ICON_FILE))
 
     init_logger() 
     log_info("=== 视觉检测系统启动 ===")

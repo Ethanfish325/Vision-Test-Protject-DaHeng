@@ -4,14 +4,13 @@
     {
       "tool_type": "MultiROI",
       "params": {
-        "input_source": "原始图像",
         "regions": [
           {
             "name": "Label1",
-            "x": 2001,
-            "y": 629,
-            "width": 346,
-            "height": 712,
+            "x": 2000,
+            "y": 601,
+            "width": 400,
+            "height": 750,
             "enabled": true
           },
           {
@@ -24,18 +23,18 @@
           },
           {
             "name": "Label3",
-            "x": 86,
-            "y": 548,
-            "width": 331,
-            "height": 745,
+            "x": 80,
+            "y": 500,
+            "width": 400,
+            "height": 800,
             "enabled": true
           },
           {
             "name": "Foot mat1",
-            "x": 105,
-            "y": 264,
-            "width": 230,
-            "height": 230,
+            "x": 84,
+            "y": 203,
+            "width": 300,
+            "height": 300,
             "enabled": true
           },
           {
@@ -56,14 +55,15 @@
           },
           {
             "name": "Foot mat4",
-            "x": 80,
-            "y": 1370,
-            "width": 230,
-            "height": 230,
+            "x": 50,
+            "y": 1250,
+            "width": 400,
+            "height": 400,
             "enabled": true
           }
         ],
-        "use_percentage": false
+        "use_percentage": false,
+        "input_source": "原始图像"
       },
       "enabled": true,
       "judge_rule": null
@@ -71,20 +71,20 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
-        "_input_source": "region:Foot mat1",
+        "mode": "standard",
+        "method": "TM_CCOEFF_NORMED",
+        "threshold": 0.7999999999999999,
         "template_path": "D:/Python project/VisionTest/model/deep/OK1.jpg",
+        "template_data": null,
         "angle_start": -30,
+        "angle_end": 30,
+        "angle_step": 5,
+        "feature_mode": "sift",
         "min_matches": 1,
-        "threshold": 0.8999999999999999,
-        "mode": "standard",
-        "method": "TM_CCOEFF_NORMED",
-        "template_data": null,
-        "angle_end": 30,
-        "angle_step": 5,
-        "feature_mode": "sift",
         "nms_distance": 20,
         "use_mask": false,
-        "mask_path": ""
+        "mask_path": "",
+        "_input_source": "region:Foot mat1"
       },
       "enabled": true,
       "judge_rule": null
@@ -92,11 +92,10 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
+        "mode": "standard",
+        "method": "TM_CCOEFF_NORMED",
+        "threshold": 0.8,
         "template_path": "D:/Python project/VisionTest/model/deep/OK2.jpg",
-        "_input_source": "region:Foot mat2",
-        "mode": "standard",
-        "method": "TM_CCOEFF_NORMED",
-        "threshold": 0.8,
         "template_data": null,
         "angle_start": -30,
         "angle_end": 30,
@@ -105,7 +104,8 @@
         "min_matches": 10,
         "nms_distance": 20,
         "use_mask": false,
-        "mask_path": ""
+        "mask_path": "",
+        "_input_source": "region:Foot mat2"
       },
       "enabled": true,
       "judge_rule": null
@@ -113,11 +113,10 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
+        "mode": "standard",
+        "method": "TM_CCOEFF_NORMED",
+        "threshold": 0.8,
         "template_path": "D:/Python project/VisionTest/model/deep/OK3.jpg",
-        "_input_source": "region:Foot mat3",
-        "mode": "standard",
-        "method": "TM_CCOEFF_NORMED",
-        "threshold": 0.8,
         "template_data": null,
         "angle_start": -30,
         "angle_end": 30,
@@ -126,7 +125,8 @@
         "min_matches": 10,
         "nms_distance": 20,
         "use_mask": false,
-        "mask_path": ""
+        "mask_path": "",
+        "_input_source": "region:Foot mat3"
       },
       "enabled": true,
       "judge_rule": null
@@ -134,10 +134,10 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
-        "template_path": "D:/Python project/VisionTest/model/deep/OK4.jpg",
         "mode": "standard",
         "method": "TM_CCOEFF_NORMED",
         "threshold": 0.8,
+        "template_path": "D:/Python project/VisionTest/model/deep/OK4.jpg",
         "template_data": null,
         "angle_start": -30,
         "angle_end": 30,
@@ -155,10 +155,10 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
-        "template_path": "D:/Python project/VisionTest/model/titile/OK1.jpg",
         "mode": "standard",
         "method": "TM_CCOEFF_NORMED",
         "threshold": 0.8,
+        "template_path": "D:/Python project/VisionTest/model/titile/OK1.jpg",
         "template_data": null,
         "angle_start": -30,
         "angle_end": 30,
@@ -176,10 +176,10 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
-        "template_path": "D:/Python project/VisionTest/model/titile/OK2.jpg",
         "mode": "standard",
         "method": "TM_CCOEFF_NORMED",
         "threshold": 0.8,
+        "template_path": "D:/Python project/VisionTest/model/titile/OK2.jpg",
         "template_data": null,
         "angle_start": -30,
         "angle_end": 30,
@@ -197,14 +197,14 @@
     {
       "tool_type": "TemplateMatch",
       "params": {
-        "template_path": "D:/Python project/VisionTest/model/titile/OK3.jpg",
-        "mode": "standard",
+        "mode": "rotation",
         "method": "TM_CCOEFF_NORMED",
         "threshold": 0.8,
+        "template_path": "D:/Python project/VisionTest/model/titile/OK3.jpg",
         "template_data": null,
         "angle_start": -30,
         "angle_end": 30,
-        "angle_step": 5,
+        "angle_step": 2.0,
         "feature_mode": "sift",
         "min_matches": 10,
         "nms_distance": 20,
