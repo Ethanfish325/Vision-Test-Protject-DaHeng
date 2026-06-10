@@ -2,7 +2,7 @@
 视觉检测系统 (Vision Inspection System)
 ========================================
 
-版本: 2.1.0
+版本: 2.2.0
 开发语言: Python 3.8+
 GUI框架: PyQt5
 图像处理: OpenCV 4.x
@@ -56,14 +56,24 @@ GUI框架: PyQt5
    - 支持软触发采集
    - GigE 网络优化（自动设置包大小）
 
-6. 结果记录
+6. 串口通信
+   - 独立的串口通信对话框，通过菜单栏「通信 > 串口通信」打开
+   - 端口扫描与选择，支持常用串口参数配置（波特率/数据位/校验位/停止位/流控制）
+   - 文本/HEX 两种模式发送数据
+   - 实时接收数据显示（支持 HEX 显示模式），自动滚动
+   - 收发字节统计，配置持久化
+   - 串口自动测试工作流：由串口数据触发的自动化测试流程
+   - 工作流状态机：IDLE -> WAITING_TRIGGER -> CAPTURING -> TESTING -> SENDING_RESULT
+   - 策略模式设计：TriggerParser（触发解析）、ResultSender（结果发送）均可扩展
+
+7. 结果记录
    - 自动保存检测结果（OK/NG）
    - NG数据保存：原始图像、标注图像、JSON数据
    - OK数据保存：CSV日志
    - 自动清理过期数据（默认保留90天）
    - 支持 overlay_image 工业叠加图层输出
 
-7. 图形界面特性
+8. 图形界面特性
    - 深色主题（VS Code风格），护眼且专业
    - 算子工具箱支持搜索过滤
    - 拖拽式流水线编辑
@@ -80,14 +90,18 @@ VisionTest/
 ├── main.spec                  # PyInstaller打包配置
 ├── requirements.txt           # Python依赖列表
 ├── ReadME.txt                 # 本说明文件
+├── runtime_hook.py            # PyInstaller运行时钩子（设置DLL搜索路径）
 ├── cleanup_after_build.bat    # 打包后清理脚本
+├── camera_manager.py          # 相机管理（硬件抽象层，海康威视SDK封装）
 │
 ├── core/                      # 核心模块
 │   ├── __init__.py
 │   ├── paths.py               # 路径管理（数据目录、方案目录等）
 │   ├── config_manager.py      # 配置管理（单例模式）
 │   ├── log_manager.py         # 日志管理（按天轮转）
-│   └── result_storage.py      # 结果存储（CSV/JSON/图像）
+│   ├── result_storage.py      # 结果存储（CSV/JSON/图像）
+│   ├── serial_comm.py         # 串口通信核心模块（端口扫描、收发管理、异步读取）
+│   └── serial_test_workflow.py # 串口自动测试工作流（状态机、触发解析、结果发送）
 │
 ├── ui/                        # UI界面模块
 │   ├── __init__.py
@@ -101,6 +115,7 @@ VisionTest/
 │       ├── param_config_dialog.py # 参数配置对话框（带实时预览）
 │       ├── pipeline_editor.py # 流水线编辑器
 │       ├── result_panel.py    # 结果显示面板
+│       ├── serial_dialog.py   # 串口通信对话框（端口配置、收发数据、HEX模式）
 │       ├── step_slot_widget.py # 步骤插槽控件（支持拖拽排序）
 │       └── zoomable_label.py  # 可缩放图片显示控件
 │
@@ -118,8 +133,6 @@ VisionTest/
 │       ├── recognize.py       # 识别工具（5种）
 │       └── utility.py         # 辅助工具（3种）
 │
-├── camera_manager.py          # 相机管理（硬件抽象层，海康威视SDK封装）
-│
 ├── MvImport/                  # 海康威视 MVS SDK Python 接口
 │   ├── __init__.py
 │   ├── CameraParams_const.py
@@ -130,24 +143,34 @@ VisionTest/
 │   └── PixelType_header.py
 │
 ├── data/                      # 运行时数据目录（自动创建）
+│   ├── icon.png               # 应用程序图标
 │   ├── users.json             # 用户数据
-│   ├── config.json            # 系统配置
 │   ├── schemes/               # 检测方案文件（JSON格式）
+│   │   └── 默认方案.json
 │   ├── errors/                # NG数据（按日期分目录）
 │   └── logs/                  # 系统日志（按天轮转）
 │
 ├── model/                     # 模型文件
-│   └── 1.png
+│   ├── deep/                  # 深度学习模型样本
+│   │   ├── NG1.jpg ~ NG4.jpg
+│   │   └── OK1.jpg ~ OK4.jpg
+│   └── titile/                # 标题检测样本
+│       ├── NG1.jpg ~ NG3.jpg
+│       └── OK1.jpg ~ OK3.jpg
 │
-├── plans/                     # 开发计划文档
-│   ├── architecture_optimization_plan.md
-│   ├── operator_optimization_plan.md
-│   ├── overlay_image_implementation_plan.md
-│   ├── tool_data_passing_architecture.md
-│   └── visual_pipeline_editor_plan.md
-│
-├── build/                     # PyInstaller构建目录
-└── dist/                      # PyInstaller输出目录
+└── plans/                     # 开发计划文档
+    ├── architecture_optimization_plan.md
+    ├── brightness_measure_plan.md
+    ├── footpad_detect_optimization_plan.md
+    ├── footpad_detect_robustness_plan.md
+    ├── operator_optimization_plan.md
+    ├── overlay_image_implementation_plan.md
+    ├── roi_result_display_plan.md
+    ├── serial_comm_plan.md
+    ├── serial_test_workflow_plan.md
+    ├── tool_data_passing_architecture.md
+    ├── user_settings_menu_plan.md
+    └── visual_pipeline_editor_plan.md
 
 --------
 安装说明
@@ -177,6 +200,9 @@ VisionTest/
 打包完成后可运行 cleanup_after_build.bat 清理不需要的大文件
 （如 Qt5 的 WebEngine、QML 等 DLL 和多语言翻译文件）。
 
+runtime_hook.py 会在打包后的程序启动时自动设置 DLL 搜索路径，
+确保 MvCameraControl.dll 能被正确加载。
+
 --------
 使用说明
 --------
@@ -198,6 +224,14 @@ VisionTest/
    - 点击算子配置参数（支持实时预览）
    - 加载测试图像进行预览
    - 保存方案
+
+4. 串口通信
+   - 通过菜单栏「通信 > 串口通信」打开串口通信对话框
+   - 点击"扫描端口"检测可用串口
+   - 选择端口并配置参数（波特率/数据位/校验位/停止位/流控制）
+   - 点击"打开串口"建立连接
+   - 在发送区输入数据，选择文本或HEX模式，点击"发送"
+   - 接收区实时显示接收到的数据
 
 --------
 视觉工具详解
@@ -322,10 +356,23 @@ VisionTest/
 8. 多区域ROI的百分比坐标范围为0~100，系统自动根据图像分辨率转换为像素坐标
 9. 模板匹配的掩膜图像需与模板图像尺寸一致，灰度图中黑色区域将被忽略
 10. 逻辑判断的表达式模式中，变量名使用"工具名.数据键"格式，可在调试界面中查看可用变量
+11. 串口通信功能依赖 pyserial 库，请确保已安装（pip install pyserial）
 
 --------
 更新日志
 --------
+
+v2.2.0 (2026-06-10)
+- 新增串口通信核心模块（serial_comm.py），支持端口扫描、参数配置、收发管理
+- 新增串口通信对话框（serial_dialog.py），独立的串口通信窗口界面
+- 新增串口自动测试工作流（serial_test_workflow.py），状态机驱动的自动化测试流程
+- 新增 PyInstaller 运行时钩子（runtime_hook.py），自动设置 DLL 搜索路径
+- 新增 plans/ 目录下多个开发计划文档（亮度测量、脚垫检测优化、ROI结果显示等）
+- 新增 model/ 目录下深度学习样本和标题检测样本数据
+- 新增 data/icon.png 应用程序图标
+- 新增 data/schemes/默认方案.json 默认检测方案
+- 新增 .gitignore 版本控制忽略配置
+- 优化项目目录结构，增加 core/ 核心模块的串口通信相关功能
 
 v2.1.0 (2026-06-03)
 - 新增形态学操作结构元素形状选择（矩形/椭圆/十字）和迭代次数
