@@ -31,8 +31,19 @@ class ResultPanel(QWidget):
             border-radius: 6px; padding: 8px;
         """)
 
+        # 总测试时间显示
+        self.time_label = QLabel("")
+        self.time_label.setAlignment(Qt.AlignCenter)
+        self.time_label.setStyleSheet("""
+            font-size: 16px; font-weight: bold; color: #4fc3f7;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 4px; padding: 4px 8px;
+        """)
+        self.time_label.setFixedHeight(28)
+
         layout.addWidget(title)
         layout.addWidget(self.status_indicator)
+        layout.addWidget(self.time_label)
 
     def show_result(self, passed, message, annotated_image=None, tool_results=None):
         if passed:
@@ -50,6 +61,13 @@ class ResultPanel(QWidget):
                 border-radius: 6px; padding: 8px;
             """)
 
+        # 显示总测试时间
+        if tool_results and "total_elapsed_ms" in tool_results:
+            total_ms = tool_results["total_elapsed_ms"]
+            self.time_label.setText(f"⏱ 总耗时: {total_ms:.0f}ms")
+        else:
+            self.time_label.setText("")
+
     def clear(self):
         self.status_indicator.setText("等待检测...")
         self.status_indicator.setStyleSheet("""
@@ -57,3 +75,4 @@ class ResultPanel(QWidget):
             background-color: #1e1e1e; border: 2px solid #444;
             border-radius: 6px; padding: 8px;
         """)
+        self.time_label.setText("")

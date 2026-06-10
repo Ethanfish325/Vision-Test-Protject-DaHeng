@@ -384,6 +384,17 @@ class MainWindow(QMainWindow):
         """)
         top_layout.addWidget(self.worker_judge)
 
+        # 总测试时间显示
+        self.worker_time_label = QLabel("")
+        self.worker_time_label.setAlignment(Qt.AlignCenter)
+        self.worker_time_label.setStyleSheet("""
+            font-size: 18px; font-weight: bold; color: #4fc3f7;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 4px; padding: 4px 12px;
+            min-width: 100px;
+        """)
+        top_layout.addWidget(self.worker_time_label)
+
         top_layout.addSpacing(20)
 
         info_widget = QWidget()
@@ -692,6 +703,18 @@ class MainWindow(QMainWindow):
             QPushButton:hover { background-color: #2a4a7c; }
         """)
         test_toolbar.addWidget(self.eng_btn_run_preview)
+
+        # 设计模式总测试时间显示
+        self.eng_time_label = QLabel("")
+        self.eng_time_label.setAlignment(Qt.AlignCenter)
+        self.eng_time_label.setStyleSheet("""
+            font-size: 16px; font-weight: bold; color: #4fc3f7;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 4px; padding: 2px 10px;
+            min-width: 80px;
+        """)
+        test_toolbar.addWidget(self.eng_time_label)
+
         test_toolbar.addStretch()
 
         # 步骤导航栏
@@ -1464,6 +1487,8 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
 
         self.eng_log.clear_log()
+        self.eng_time_label.setText("")
+        self.eng_result_panel.clear()
         self.eng_log.append_info(f"══════ 流水线测试开始 ══════", "#4fc3f7")
         self.eng_log.append_info(f"方案: {self._current_scheme_name or '未命名'}", "#888")
 
@@ -1511,6 +1536,8 @@ class MainWindow(QMainWindow):
 
             self.eng_log.append_separator()
             total_ms = sum(r.elapsed_ms for r in results)
+            # 更新设计模式总测试时间显示
+            self.eng_time_label.setText(f"⏱ {total_ms:.0f}ms")
             if passed:
                 self.eng_log.append_info(
                     f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
@@ -1558,6 +1585,7 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
 
         self.worker_log.clear_log()
+        self.worker_time_label.setText("")
         self.worker_log.append_info(f"══════ 检测开始 ══════", "#4fc3f7")
 
         try:
@@ -1599,6 +1627,8 @@ class MainWindow(QMainWindow):
 
             self.worker_log.append_separator()
             total_ms = sum(r.elapsed_ms for r in results)
+            # 更新总测试时间显示
+            self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
             if passed:
                 self.worker_log.append_info(
                     f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
@@ -1957,6 +1987,7 @@ class MainWindow(QMainWindow):
             # 记录日志
             results = self.vision_engine.get_last_results()
             self.worker_log.clear_log()
+            self.worker_time_label.setText("")
             self.worker_log.append_info(
                 f"══════ 自动测试触发 #{self._serial_workflow.trigger_count} ══════",
                 "#4fc3f7")
@@ -1968,6 +1999,8 @@ class MainWindow(QMainWindow):
                     r.message, r.elapsed_ms)
             self.worker_log.append_separator()
             total_ms = sum(r.elapsed_ms for r in results)
+            # 更新总测试时间显示
+            self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
             if passed:
                 self.worker_log.append_info(
                     f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
