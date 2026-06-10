@@ -18,6 +18,7 @@ env/
 
 # Project specific - build output
 build/
+dist.zip
 
 # Data - keep structure but ignore runtime data
 data/errors/
