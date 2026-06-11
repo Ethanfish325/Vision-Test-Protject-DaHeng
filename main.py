@@ -12,7 +12,7 @@ from PyQt5.QtCore import Qt
 from core.paths import ensure_dirs, ICON_FILE
 from core.log_manager import init_logger, log_info
 from ui.main_window import MainWindow
-
+     
 
 def setup_high_dpi():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)

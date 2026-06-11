@@ -1190,18 +1190,19 @@ class MainWindow(QMainWindow):
         dialog.setMinimumHeight(550)
 
         layout = QVBoxLayout(dialog)
-        # 共享 CameraManager 实例，避免重复打开同一相机
-        self._camera_panel = CameraPanel(camera_mgr=self.camera_mgr)
-        self._camera_panel.frame_received.connect(self._on_frame_received)
-        self._camera_panel.capture_completed.connect(self._on_capture_completed)
-        self._camera_panel.status_message.connect(self._on_camera_status_message)
-        layout.addWidget(self._camera_panel)
+        # 创建一个临时面板用于对话框，不赋值给 self._camera_panel
+        # 避免 dialog 关闭后 Qt 自动销毁该面板导致 self._camera_panel 悬空
+        panel = CameraPanel(camera_mgr=self.camera_mgr)
+        panel.frame_received.connect(self._on_frame_received)
+        panel.capture_completed.connect(self._on_capture_completed)
+        panel.status_message.connect(self._on_camera_status_message)
+        layout.addWidget(panel)
 
         btn_close = QPushButton("关闭")
         btn_close.clicked.connect(dialog.accept)
         layout.addWidget(btn_close)
 
-        self._camera_panel.enumerate_devices()
+        panel.enumerate_devices()
         dialog.exec_()
 
     def _close_camera(self):
@@ -1655,6 +1656,10 @@ class MainWindow(QMainWindow):
         finally:
             self.worker_btn_detect.setEnabled(True)
             self.worker_btn_detect.setText("📷 开始检测")
+            # 清除原始图像，确保下次点击"开始检测"时重新拍照
+            self._raw_image = None
+            self._raw_width = 0
+            self._raw_height = 0
 
     def _show_log_settings(self):
         """打开日志限额设置对话框"""

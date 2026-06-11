@@ -346,6 +346,7 @@ class CameraManager:
         self._lock = threading.Lock()
         self._device_info = None
         self._is_trigger_mode = False
+        self._frame_callback = None  # 保存帧回调，用于 capture_once 恢复取流
 
     # ---------- SDK 初始化 ----------
 
@@ -754,6 +755,7 @@ class CameraManager:
                 log_error(f"开始采集失败: {error_code_to_hex(ret)}")
                 return False
 
+            self._frame_callback = frame_callback  # 保存回调引用
             self._grabbing_thread = CameraGrabbingThread(self._camera)
             if frame_callback is not None:
                 self._grabbing_thread.frame_received.connect(frame_callback)
@@ -784,7 +786,10 @@ class CameraManager:
 
     def capture_once(self, timeout_ms: int = 3000) -> Optional[Tuple[int, int, int, bytes]]:
         """
-        单次拍照（软触发模式）。
+        单次拍照。
+
+        在连续采集模式下，临时停止取流线程，直接从相机获取一帧图像。
+        避免切换触发模式带来的状态不一致问题。
 
         Args:
             timeout_ms: 等待图像的超时时间（毫秒）
@@ -796,22 +801,14 @@ class CameraManager:
             return None
 
         try:
-            was_continuous = not self._is_trigger_mode
-            if was_continuous:
-                was_grabbing = self._is_grabbing
-                if was_grabbing:
-                    self.stop_grabbing()
-                self.set_trigger_mode(True)
-                self._camera.MV_CC_StartGrabbing()
-                time.sleep(0.1)
+            was_grabbing = self._is_grabbing
+            # 停止取流线程，避免与 GetImageBuffer 竞争
+            if was_grabbing:
+                self.stop_grabbing()
 
-            ret = self._camera.MV_CC_SetCommandValue("TriggerSoftware")
-            if ret != MV_OK:
-                log_error(f"软触发失败: {error_code_to_hex(ret)}")
-                if was_continuous:
-                    self.stop_grabbing()
-                    self.set_trigger_mode(False)
-                return None
+            # 确保相机正在采集
+            self._camera.MV_CC_StartGrabbing()
+            time.sleep(0.05)
 
             st_frame = MV_FRAME_OUT()
             ctypes.memset(ctypes.byref(st_frame), 0, ctypes.sizeof(MV_FRAME_OUT))
@@ -833,22 +830,38 @@ class CameraManager:
 
                 self._camera.MV_CC_FreeImageBuffer(st_frame)
 
-                if was_continuous:
-                    self.stop_grabbing()
-                    self.set_trigger_mode(False)
-                    self._camera.MV_CC_StartGrabbing()
+                # 恢复连续取流
+                if was_grabbing:
+                    self._grabbing_thread = CameraGrabbingThread(self._camera)
+                    if self._frame_callback is not None:
+                        self._grabbing_thread.frame_received.connect(self._frame_callback)
+                    self._grabbing_thread.start()
                     self._is_grabbing = True
 
                 return (width, height, pixel_type, img_bytes)
             else:
                 log_error(f"获取图像超时或失败: {error_code_to_hex(ret)}")
-                if was_continuous:
-                    self.stop_grabbing()
-                    self.set_trigger_mode(False)
+                # 恢复连续取流
+                if was_grabbing:
+                    self._grabbing_thread = CameraGrabbingThread(self._camera)
+                    if self._frame_callback is not None:
+                        self._grabbing_thread.frame_received.connect(self._frame_callback)
+                    self._grabbing_thread.start()
+                    self._is_grabbing = True
                 return None
 
         except Exception as e:
             log_error(f"单次拍照异常: {e}")
+            # 异常时也尝试恢复取流
+            try:
+                if was_grabbing and not self._is_grabbing:
+                    self._grabbing_thread = CameraGrabbingThread(self._camera)
+                    if self._frame_callback is not None:
+                        self._grabbing_thread.frame_received.connect(self._frame_callback)
+                    self._grabbing_thread.start()
+                    self._is_grabbing = True
+            except Exception:
+                pass
             return None
 
     # ---------- 图像显示辅助 ----------
