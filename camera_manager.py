@@ -88,9 +88,11 @@ try:
     )
     from MvErrorDefine_const import MV_E_CALLORDER, MV_OK
     from PixelType_header import (
-        PixelType_Gvsp_Mono8,
+        PixelType_Gvsp_Mono8, PixelType_Gvsp_Mono8_Signed,
         PixelType_Gvsp_Mono10, PixelType_Gvsp_Mono10_Packed,
         PixelType_Gvsp_Mono12, PixelType_Gvsp_Mono12_Packed,
+        PixelType_Gvsp_Mono14,
+        PixelType_Gvsp_Mono16,
         PixelType_Gvsp_BayerGR8, PixelType_Gvsp_BayerRG8,
         PixelType_Gvsp_BayerGB8, PixelType_Gvsp_BayerBG8,
         PixelType_Gvsp_BayerGR10, PixelType_Gvsp_BayerRG10,
@@ -101,10 +103,29 @@ try:
         PixelType_Gvsp_BayerGB10_Packed, PixelType_Gvsp_BayerBG10_Packed,
         PixelType_Gvsp_BayerGR12_Packed, PixelType_Gvsp_BayerRG12_Packed,
         PixelType_Gvsp_BayerGB12_Packed, PixelType_Gvsp_BayerBG12_Packed,
-        PixelType_Gvsp_BayerRBGG8,
+        PixelType_Gvsp_BayerRBGG8, PixelType_Gvsp_BayerBRGG8,
         PixelType_Gvsp_BayerGR16, PixelType_Gvsp_BayerRG16,
         PixelType_Gvsp_BayerGB16, PixelType_Gvsp_BayerBG16,
         PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed,
+        PixelType_Gvsp_YUV411_Packed, PixelType_Gvsp_YUV444_Packed,
+        PixelType_Gvsp_RGB8_Packed, PixelType_Gvsp_BGR8_Packed,
+        # HB 系列
+        PixelType_Gvsp_HB_Mono8, PixelType_Gvsp_HB_Mono10,
+        PixelType_Gvsp_HB_Mono10_Packed, PixelType_Gvsp_HB_Mono12,
+        PixelType_Gvsp_HB_Mono12_Packed, PixelType_Gvsp_HB_Mono16,
+        PixelType_Gvsp_HB_BayerGR8, PixelType_Gvsp_HB_BayerRG8,
+        PixelType_Gvsp_HB_BayerGB8, PixelType_Gvsp_HB_BayerBG8,
+        PixelType_Gvsp_HB_BayerGR10, PixelType_Gvsp_HB_BayerRG10,
+        PixelType_Gvsp_HB_BayerGB10, PixelType_Gvsp_HB_BayerBG10,
+        PixelType_Gvsp_HB_BayerGR12, PixelType_Gvsp_HB_BayerRG12,
+        PixelType_Gvsp_HB_BayerGB12, PixelType_Gvsp_HB_BayerBG12,
+        PixelType_Gvsp_HB_BayerGR10_Packed, PixelType_Gvsp_HB_BayerRG10_Packed,
+        PixelType_Gvsp_HB_BayerGB10_Packed, PixelType_Gvsp_HB_BayerBG10_Packed,
+        PixelType_Gvsp_HB_BayerGR12_Packed, PixelType_Gvsp_HB_BayerRG12_Packed,
+        PixelType_Gvsp_HB_BayerGB12_Packed, PixelType_Gvsp_HB_BayerBG12_Packed,
+        PixelType_Gvsp_HB_BayerRBGG8, PixelType_Gvsp_HB_BayerBRGG8,
+        PixelType_Gvsp_HB_YUV422_Packed, PixelType_Gvsp_HB_YUV422_YUYV_Packed,
+        PixelType_Gvsp_HB_RGB8_Packed, PixelType_Gvsp_HB_BGR8_Packed,
     )
     SDK_AVAILABLE = True
 except ImportError as e:
@@ -149,8 +170,9 @@ def is_mono_data(pixel_type: int) -> bool:
 
 
 def is_color_data(pixel_type: int) -> bool:
-    """判断是否为彩色/Bayer 图像"""
+    """判断是否为彩色/Bayer 图像（包含标准格式和 HB_ 系列）"""
     color_types = [
+        # 标准 Bayer
         PixelType_Gvsp_BayerGR8, PixelType_Gvsp_BayerRG8,
         PixelType_Gvsp_BayerGB8, PixelType_Gvsp_BayerBG8,
         PixelType_Gvsp_BayerGR10, PixelType_Gvsp_BayerRG10,
@@ -161,48 +183,173 @@ def is_color_data(pixel_type: int) -> bool:
         PixelType_Gvsp_BayerGB10_Packed, PixelType_Gvsp_BayerBG10_Packed,
         PixelType_Gvsp_BayerGR12_Packed, PixelType_Gvsp_BayerRG12_Packed,
         PixelType_Gvsp_BayerGB12_Packed, PixelType_Gvsp_BayerBG12_Packed,
-        PixelType_Gvsp_BayerRBGG8,
+        PixelType_Gvsp_BayerRBGG8, PixelType_Gvsp_BayerBRGG8,
         PixelType_Gvsp_BayerGR16, PixelType_Gvsp_BayerRG16,
         PixelType_Gvsp_BayerGB16, PixelType_Gvsp_BayerBG16,
+        # 标准 YUV
         PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed,
+        PixelType_Gvsp_YUV411_Packed, PixelType_Gvsp_YUV444_Packed,
+        # 标准 RGB/BGR Packed
+        PixelType_Gvsp_RGB8_Packed, PixelType_Gvsp_BGR8_Packed,
+        # HB 系列 Bayer
+        PixelType_Gvsp_HB_BayerGR8, PixelType_Gvsp_HB_BayerRG8,
+        PixelType_Gvsp_HB_BayerGB8, PixelType_Gvsp_HB_BayerBG8,
+        PixelType_Gvsp_HB_BayerGR10, PixelType_Gvsp_HB_BayerRG10,
+        PixelType_Gvsp_HB_BayerGB10, PixelType_Gvsp_HB_BayerBG10,
+        PixelType_Gvsp_HB_BayerGR12, PixelType_Gvsp_HB_BayerRG12,
+        PixelType_Gvsp_HB_BayerGB12, PixelType_Gvsp_HB_BayerBG12,
+        PixelType_Gvsp_HB_BayerGR10_Packed, PixelType_Gvsp_HB_BayerRG10_Packed,
+        PixelType_Gvsp_HB_BayerGB10_Packed, PixelType_Gvsp_HB_BayerBG10_Packed,
+        PixelType_Gvsp_HB_BayerGR12_Packed, PixelType_Gvsp_HB_BayerRG12_Packed,
+        PixelType_Gvsp_HB_BayerGB12_Packed, PixelType_Gvsp_HB_BayerBG12_Packed,
+        PixelType_Gvsp_HB_BayerRBGG8, PixelType_Gvsp_HB_BayerBRGG8,
+        # HB 系列 YUV
+        PixelType_Gvsp_HB_YUV422_Packed, PixelType_Gvsp_HB_YUV422_YUYV_Packed,
+        # HB 系列 RGB/BGR Packed
+        PixelType_Gvsp_HB_RGB8_Packed, PixelType_Gvsp_HB_BGR8_Packed,
     ]
     return pixel_type in color_types
+
+
+# 像素格式名称映射表（用于调试日志）
+_PIXEL_TYPE_NAMES = {
+    PixelType_Gvsp_Mono8: "Mono8",
+    PixelType_Gvsp_Mono10: "Mono10",
+    PixelType_Gvsp_Mono10_Packed: "Mono10_Packed",
+    PixelType_Gvsp_Mono12: "Mono12",
+    PixelType_Gvsp_Mono12_Packed: "Mono12_Packed",
+    PixelType_Gvsp_Mono14: "Mono14",
+    PixelType_Gvsp_Mono16: "Mono16",
+    PixelType_Gvsp_BayerGR8: "BayerGR8",
+    PixelType_Gvsp_BayerRG8: "BayerRG8",
+    PixelType_Gvsp_BayerGB8: "BayerGB8",
+    PixelType_Gvsp_BayerBG8: "BayerBG8",
+    PixelType_Gvsp_BayerGR10: "BayerGR10",
+    PixelType_Gvsp_BayerRG10: "BayerRG10",
+    PixelType_Gvsp_BayerGB10: "BayerGB10",
+    PixelType_Gvsp_BayerBG10: "BayerBG10",
+    PixelType_Gvsp_BayerGR12: "BayerGR12",
+    PixelType_Gvsp_BayerRG12: "BayerRG12",
+    PixelType_Gvsp_BayerGB12: "BayerGB12",
+    PixelType_Gvsp_BayerBG12: "BayerBG12",
+    PixelType_Gvsp_BayerGR10_Packed: "BayerGR10_Packed",
+    PixelType_Gvsp_BayerRG10_Packed: "BayerRG10_Packed",
+    PixelType_Gvsp_BayerGB10_Packed: "BayerGB10_Packed",
+    PixelType_Gvsp_BayerBG10_Packed: "BayerBG10_Packed",
+    PixelType_Gvsp_BayerGR12_Packed: "BayerGR12_Packed",
+    PixelType_Gvsp_BayerRG12_Packed: "BayerRG12_Packed",
+    PixelType_Gvsp_BayerGB12_Packed: "BayerGB12_Packed",
+    PixelType_Gvsp_BayerBG12_Packed: "BayerBG12_Packed",
+    PixelType_Gvsp_BayerGR16: "BayerGR16",
+    PixelType_Gvsp_BayerRG16: "BayerRG16",
+    PixelType_Gvsp_BayerGB16: "BayerGB16",
+    PixelType_Gvsp_BayerBG16: "BayerBG16",
+    PixelType_Gvsp_BayerRBGG8: "BayerRBGG8",
+    PixelType_Gvsp_BayerBRGG8: "BayerBRGG8",
+    PixelType_Gvsp_YUV422_Packed: "YUV422_Packed",
+    PixelType_Gvsp_YUV422_YUYV_Packed: "YUV422_YUYV_Packed",
+    PixelType_Gvsp_YUV411_Packed: "YUV411_Packed",
+    PixelType_Gvsp_YUV444_Packed: "YUV444_Packed",
+    PixelType_Gvsp_RGB8_Packed: "RGB8_Packed",
+    PixelType_Gvsp_BGR8_Packed: "BGR8_Packed",
+    # HB 系列
+    PixelType_Gvsp_HB_Mono8: "HB_Mono8",
+    PixelType_Gvsp_HB_Mono10: "HB_Mono10",
+    PixelType_Gvsp_HB_Mono10_Packed: "HB_Mono10_Packed",
+    PixelType_Gvsp_HB_Mono12: "HB_Mono12",
+    PixelType_Gvsp_HB_Mono12_Packed: "HB_Mono12_Packed",
+    PixelType_Gvsp_HB_Mono16: "HB_Mono16",
+    PixelType_Gvsp_HB_BayerGR8: "HB_BayerGR8",
+    PixelType_Gvsp_HB_BayerRG8: "HB_BayerRG8",
+    PixelType_Gvsp_HB_BayerGB8: "HB_BayerGB8",
+    PixelType_Gvsp_HB_BayerBG8: "HB_BayerBG8",
+    PixelType_Gvsp_HB_BayerGR10: "HB_BayerGR10",
+    PixelType_Gvsp_HB_BayerRG10: "HB_BayerRG10",
+    PixelType_Gvsp_HB_BayerGB10: "HB_BayerGB10",
+    PixelType_Gvsp_HB_BayerBG10: "HB_BayerBG10",
+    PixelType_Gvsp_HB_BayerGR12: "HB_BayerGR12",
+    PixelType_Gvsp_HB_BayerRG12: "HB_BayerRG12",
+    PixelType_Gvsp_HB_BayerGB12: "HB_BayerGB12",
+    PixelType_Gvsp_HB_BayerBG12: "HB_BayerBG12",
+    PixelType_Gvsp_HB_BayerGR10_Packed: "HB_BayerGR10_Packed",
+    PixelType_Gvsp_HB_BayerRG10_Packed: "HB_BayerRG10_Packed",
+    PixelType_Gvsp_HB_BayerGB10_Packed: "HB_BayerGB10_Packed",
+    PixelType_Gvsp_HB_BayerBG10_Packed: "HB_BayerBG10_Packed",
+    PixelType_Gvsp_HB_BayerGR12_Packed: "HB_BayerGR12_Packed",
+    PixelType_Gvsp_HB_BayerRG12_Packed: "HB_BayerRG12_Packed",
+    PixelType_Gvsp_HB_BayerGB12_Packed: "HB_BayerGB12_Packed",
+    PixelType_Gvsp_HB_BayerBG12_Packed: "HB_BayerBG12_Packed",
+    PixelType_Gvsp_HB_BayerRBGG8: "HB_BayerRBGG8",
+    PixelType_Gvsp_HB_BayerBRGG8: "HB_BayerBRGG8",
+    PixelType_Gvsp_HB_YUV422_Packed: "HB_YUV422_Packed",
+    PixelType_Gvsp_HB_YUV422_YUYV_Packed: "HB_YUV422_YUYV_Packed",
+    PixelType_Gvsp_HB_RGB8_Packed: "HB_RGB8_Packed",
+    PixelType_Gvsp_HB_BGR8_Packed: "HB_BGR8_Packed",
+}
+
+
+def _get_pixel_type_name(pixel_type: int) -> str:
+    """获取像素格式的可读名称（用于调试日志）"""
+    return _PIXEL_TYPE_NAMES.get(pixel_type, f"未知(0x{pixel_type:08X})")
 
 
 def pixel_type_to_opencv(pixel_type: int) -> Tuple[Optional[int], bool]:
     """
     将海康像素格式映射到 OpenCV 转换标志。
 
+    支持标准 PixelType_Gvsp_* 和海康私有 HB_* 系列格式。
+
     Returns:
         (cv2_color_conversion_flag_or_None, is_color)
     """
-    mapping = {
-        PixelType_Gvsp_Mono8: (None, False),
-        PixelType_Gvsp_BayerGR8: (cv2.COLOR_BayerGR2BGR, True),
-        PixelType_Gvsp_BayerRG8: (cv2.COLOR_BayerRG2BGR, True),
-        PixelType_Gvsp_BayerGB8: (cv2.COLOR_BayerGB2BGR, True),
-        PixelType_Gvsp_BayerBG8: (cv2.COLOR_BayerBG2BGR, True),
+    # ========== 标准 PixelType_Gvsp_* 系列 ==========
+
+    # --- Mono ---
+    mono_types = [
+        PixelType_Gvsp_Mono8, PixelType_Gvsp_Mono8_Signed,
+        PixelType_Gvsp_Mono10, PixelType_Gvsp_Mono10_Packed,
+        PixelType_Gvsp_Mono12, PixelType_Gvsp_Mono12_Packed,
+        PixelType_Gvsp_Mono14, PixelType_Gvsp_Mono16,
+    ]
+    if pixel_type in mono_types:
+        return (None, False)
+
+    # --- Bayer 8bit ---
+    # 注意：Bayer 排列的映射需要根据相机实际输出调整。
+    # 如果橙色物体显示为蓝色，说明红蓝通道互换，需要换一种排列。
+    # 相机输出 BayerGR8(0x01080008) 但橙色变蓝 → 改用 BayerGB2BGR
+    bayer_8bit_map = {
+        PixelType_Gvsp_BayerGR8: cv2.COLOR_BayerGB2BGR,  # 原为 GR2BGR，橙色变蓝故改为 GB2BGR
+        PixelType_Gvsp_BayerRG8: cv2.COLOR_BayerRG2BGR,
+        PixelType_Gvsp_BayerGB8: cv2.COLOR_BayerGB2BGR,
+        PixelType_Gvsp_BayerBG8: cv2.COLOR_BayerBG2BGR,
     }
+    if pixel_type in bayer_8bit_map:
+        return (bayer_8bit_map[pixel_type], True)
+
+    # --- Bayer 10/12bit ---
     bayer_gr_10_12 = [
         PixelType_Gvsp_BayerGR10, PixelType_Gvsp_BayerGR10_Packed,
         PixelType_Gvsp_BayerGR12, PixelType_Gvsp_BayerGR12_Packed,
+        PixelType_Gvsp_BayerGR16,
     ]
     bayer_rg_10_12 = [
         PixelType_Gvsp_BayerRG10, PixelType_Gvsp_BayerRG10_Packed,
         PixelType_Gvsp_BayerRG12, PixelType_Gvsp_BayerRG12_Packed,
+        PixelType_Gvsp_BayerRG16,
     ]
     bayer_gb_10_12 = [
         PixelType_Gvsp_BayerGB10, PixelType_Gvsp_BayerGB10_Packed,
         PixelType_Gvsp_BayerGB12, PixelType_Gvsp_BayerGB12_Packed,
+        PixelType_Gvsp_BayerGB16,
     ]
     bayer_bg_10_12 = [
         PixelType_Gvsp_BayerBG10, PixelType_Gvsp_BayerBG10_Packed,
         PixelType_Gvsp_BayerBG12, PixelType_Gvsp_BayerBG12_Packed,
+        PixelType_Gvsp_BayerBG16,
     ]
 
-    if pixel_type in mapping:
-        return mapping[pixel_type]
-    elif pixel_type in bayer_gr_10_12:
+    if pixel_type in bayer_gr_10_12:
         return (cv2.COLOR_BayerGR2BGR, True)
     elif pixel_type in bayer_rg_10_12:
         return (cv2.COLOR_BayerRG2BGR, True)
@@ -210,10 +357,90 @@ def pixel_type_to_opencv(pixel_type: int) -> Tuple[Optional[int], bool]:
         return (cv2.COLOR_BayerGB2BGR, True)
     elif pixel_type in bayer_bg_10_12:
         return (cv2.COLOR_BayerBG2BGR, True)
-    elif pixel_type in (PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed):
+
+    # --- 特殊 Bayer ---
+    if pixel_type in (PixelType_Gvsp_BayerRBGG8, PixelType_Gvsp_BayerBRGG8):
+        return (cv2.COLOR_BayerBG2BGR, True)  # 近似处理
+
+    # --- YUV ---
+    if pixel_type in (PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed):
         return (cv2.COLOR_YUV2BGR_YUYV, True)
-    else:
+    if pixel_type == PixelType_Gvsp_YUV411_Packed:
+        return (cv2.COLOR_YUV2BGR_Y411, True)
+    if pixel_type == PixelType_Gvsp_YUV444_Packed:
+        return (cv2.COLOR_YUV2BGR_Y444, True)
+
+    # ========== 海康私有 HB_* 系列 ==========
+    # HB_ 系列与标准系列命名规则相同，映射关系一致
+
+    # --- HB Mono ---
+    hb_mono_types = [
+        PixelType_Gvsp_HB_Mono8, PixelType_Gvsp_HB_Mono10,
+        PixelType_Gvsp_HB_Mono10_Packed, PixelType_Gvsp_HB_Mono12,
+        PixelType_Gvsp_HB_Mono12_Packed, PixelType_Gvsp_HB_Mono16,
+    ]
+    if pixel_type in hb_mono_types:
         return (None, False)
+
+    # --- HB Bayer 8bit ---
+    hb_bayer_8bit_map = {
+        PixelType_Gvsp_HB_BayerGR8: cv2.COLOR_BayerGR2BGR,
+        PixelType_Gvsp_HB_BayerRG8: cv2.COLOR_BayerRG2BGR,
+        PixelType_Gvsp_HB_BayerGB8: cv2.COLOR_BayerGB2BGR,
+        PixelType_Gvsp_HB_BayerBG8: cv2.COLOR_BayerBG2BGR,
+    }
+    if pixel_type in hb_bayer_8bit_map:
+        return (hb_bayer_8bit_map[pixel_type], True)
+
+    # --- HB Bayer 10/12bit ---
+    hb_bayer_gr = [
+        PixelType_Gvsp_HB_BayerGR10, PixelType_Gvsp_HB_BayerGR10_Packed,
+        PixelType_Gvsp_HB_BayerGR12, PixelType_Gvsp_HB_BayerGR12_Packed,
+    ]
+    hb_bayer_rg = [
+        PixelType_Gvsp_HB_BayerRG10, PixelType_Gvsp_HB_BayerRG10_Packed,
+        PixelType_Gvsp_HB_BayerRG12, PixelType_Gvsp_HB_BayerRG12_Packed,
+    ]
+    hb_bayer_gb = [
+        PixelType_Gvsp_HB_BayerGB10, PixelType_Gvsp_HB_BayerGB10_Packed,
+        PixelType_Gvsp_HB_BayerGB12, PixelType_Gvsp_HB_BayerGB12_Packed,
+    ]
+    hb_bayer_bg = [
+        PixelType_Gvsp_HB_BayerBG10, PixelType_Gvsp_HB_BayerBG10_Packed,
+        PixelType_Gvsp_HB_BayerBG12, PixelType_Gvsp_HB_BayerBG12_Packed,
+    ]
+
+    if pixel_type in hb_bayer_gr:
+        return (cv2.COLOR_BayerGR2BGR, True)
+    elif pixel_type in hb_bayer_rg:
+        return (cv2.COLOR_BayerRG2BGR, True)
+    elif pixel_type in hb_bayer_gb:
+        return (cv2.COLOR_BayerGB2BGR, True)
+    elif pixel_type in hb_bayer_bg:
+        return (cv2.COLOR_BayerBG2BGR, True)
+
+    # --- HB 特殊 Bayer ---
+    if pixel_type in (PixelType_Gvsp_HB_BayerRBGG8, PixelType_Gvsp_HB_BayerBRGG8):
+        return (cv2.COLOR_BayerBG2BGR, True)
+
+    # --- HB YUV ---
+    if pixel_type in (PixelType_Gvsp_HB_YUV422_Packed, PixelType_Gvsp_HB_YUV422_YUYV_Packed):
+        return (cv2.COLOR_YUV2BGR_YUYV, True)
+
+    # --- HB RGB/BGR Packed ---
+    if pixel_type == PixelType_Gvsp_HB_RGB8_Packed:
+        return (cv2.COLOR_RGB2BGR, True)
+    if pixel_type == PixelType_Gvsp_HB_BGR8_Packed:
+        return (None, True)  # 已经是 BGR，无需转换
+
+    # --- 标准 RGB/BGR Packed ---
+    if pixel_type == PixelType_Gvsp_RGB8_Packed:
+        return (cv2.COLOR_RGB2BGR, True)
+    if pixel_type == PixelType_Gvsp_BGR8_Packed:
+        return (None, True)
+
+    # 未知格式
+    return (None, False)
 
 
 def raw_to_opencv(frame_data: bytes, width: int, height: int,
@@ -233,21 +460,28 @@ def raw_to_opencv(frame_data: bytes, width: int, height: int,
     try:
         img_data = np.frombuffer(frame_data, dtype=np.uint8)
 
+        # ---------- Mono8 直接返回 ----------
         if pixel_type == PixelType_Gvsp_Mono8:
             return img_data.reshape((height, width)).copy()
 
+        # ---------- 彩色/Bayer 格式 ----------
         elif is_color_data(pixel_type):
             bayer_img = img_data.reshape((height, width)).copy()
             cv_color, _ = pixel_type_to_opencv(pixel_type)
             if cv_color is not None:
                 return cv2.cvtColor(bayer_img, cv_color)
-            return cv2.cvtColor(bayer_img, cv2.COLOR_BayerBG2BGR)
+            # 回退：尝试所有 4 种 Bayer 排列，取颜色最丰富的那个
+            # （避免硬编码 BayerBG2BGR 导致红蓝通道互换）
+            log_warning(f"未知 Bayer 格式 pixel_type={pixel_type}，尝试自动检测排列")
+            return _auto_detect_bayer(bayer_img)
 
+        # ---------- YUV 格式 ----------
         elif pixel_type in (PixelType_Gvsp_YUV422_Packed,
                             PixelType_Gvsp_YUV422_YUYV_Packed):
             yuv_img = img_data.reshape((height, width, 2)).copy()
             return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_YUYV)
 
+        # ---------- 其他（尝试按 3 通道或单通道解析） ----------
         else:
             try:
                 return img_data.reshape((height, width, 3)).copy()
@@ -257,6 +491,51 @@ def raw_to_opencv(frame_data: bytes, width: int, height: int,
     except Exception as e:
         log_error(f"图像格式转换失败: {e}")
         return None
+
+
+def _auto_detect_bayer(bayer_img: np.ndarray) -> np.ndarray:
+    """
+    自动检测 Bayer 排列方式。
+    尝试 4 种排列，选择颜色方差最大的结果（即颜色最丰富的）。
+    这通常能正确还原彩色图像，避免红蓝通道互换。
+
+    Args:
+        bayer_img: 单通道 Bayer RAW 图像 (H, W)
+
+    Returns:
+        BGR 格式的 numpy 数组
+    """
+    bayer_modes = [
+        ("BayerBG2BGR", cv2.COLOR_BayerBG2BGR),
+        ("BayerGB2BGR", cv2.COLOR_BayerGB2BGR),
+        ("BayerRG2BGR", cv2.COLOR_BayerRG2BGR),
+        ("BayerGR2BGR", cv2.COLOR_BayerGR2BGR),
+    ]
+
+    best_result = None
+    best_score = -1.0
+    best_name = "BayerBG2BGR"
+
+    for name, code in bayer_modes:
+        try:
+            bgr = cv2.cvtColor(bayer_img, code)
+            # 计算颜色方差：三个通道的方差之和越大，颜色越丰富
+            score = (np.var(bgr[:, :, 0]) + np.var(bgr[:, :, 1]) +
+                     np.var(bgr[:, :, 2]))
+            if score > best_score:
+                best_score = score
+                best_result = bgr
+                best_name = name
+        except Exception:
+            continue
+
+    if best_result is not None:
+        log_info(f"自动检测 Bayer 排列: {best_name} (score={best_score:.1f})")
+        return best_result
+
+    # 所有尝试都失败，回退到 BayerBG2BGR
+    log_error("自动检测 Bayer 排列失败，回退到 BayerBG2BGR")
+    return cv2.cvtColor(bayer_img, cv2.COLOR_BayerBG2BGR)
 
 
 # ============================================================
@@ -281,6 +560,7 @@ class CameraGrabbingThread(QThread):
         self._running = True
         st_frame = MV_FRAME_OUT()
         ctypes.memset(ctypes.byref(st_frame), 0, ctypes.sizeof(MV_FRAME_OUT))
+        _logged_pixel_type = False  # 只打印一次像素格式信息
 
         while self._running:
             try:
@@ -291,6 +571,12 @@ class CameraGrabbingThread(QThread):
                     height = frame_info.nHeight
                     pixel_type = frame_info.enPixelType
                     frame_len = frame_info.nFrameLen
+
+                    # 首次获取到帧时，打印像素格式信息（方便调试颜色问题）
+                    if not _logged_pixel_type:
+                        _logged_pixel_type = True
+                        pixel_name = _get_pixel_type_name(pixel_type)
+                        log_info(f"相机输出: {width}x{height}, 像素格式={pixel_name} (0x{pixel_type:08X})")
 
                     if st_frame.pBufAddr and frame_len > 0:
                         buf = (ctypes.c_ubyte * frame_len).from_address(

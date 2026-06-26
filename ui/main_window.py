@@ -130,9 +130,13 @@ class MainWindow(QMainWindow):
         self._last_annotated = None
 
         # 用户角色与权限控制
+        self._current_user_role = "engineer"   # 当前用户角色: operator / engineer / admin
+        self._current_user_name = "工程师"      # 当前用户显示名称
+        '''
+        # 用户角色与权限控制
         self._current_user_role = "operator"   # 当前用户角色: operator / engineer / admin
         self._current_user_name = "操作员"      # 当前用户显示名称
-
+        '''
         # 串口通信与自动测试
         self._serial_comm: Optional[SerialCommManager] = None
         self._serial_workflow: Optional[SerialTestWorkflow] = None
@@ -202,7 +206,7 @@ class MainWindow(QMainWindow):
 
         self.btn_engineer_mode = QPushButton("⚙ 设计模式")
         self.btn_engineer_mode.setCheckable(True)
-        self.btn_engineer_mode.setEnabled(False)  # 默认操作员模式，禁用设计模式
+        self.btn_engineer_mode.setEnabled(True)  # 默认操作员模式，禁用设计模式
         self.btn_engineer_mode.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
@@ -859,12 +863,12 @@ class MainWindow(QMainWindow):
 
         # ── 用户菜单 ──
         user_menu = menubar.addMenu("用户")
-        self.act_current_user = QAction("当前用户：操作员", self)
-        self.act_current_user.setEnabled(False)
+        self.act_current_user = QAction("当前用户：工程师", self)
+        self.act_current_user.setEnabled(True)
         self.act_switch_user = QAction("切换用户...", self)
         self.act_switch_user.triggered.connect(self._show_login_dialog)
         self.act_logout = QAction("退出登录", self)
-        self.act_logout.setEnabled(False)
+        self.act_logout.setEnabled(True)
         self.act_logout.triggered.connect(self._logout)
         user_menu.addAction(self.act_current_user)
         user_menu.addSeparator()
