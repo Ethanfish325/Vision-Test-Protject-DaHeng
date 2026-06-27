@@ -520,6 +520,7 @@ class CameraManager:
         self._is_trigger_mode = False #当前是否为触发模式
         self._grabbing_thread = None
         self._data_stream = None
+        self._stream_on = False      # 数据流是否已开启
     
     # ---- 属性 ----
     
@@ -831,6 +832,14 @@ class CameraManager:
             # 先停止取流
             self.stop_grabbing()
             
+            # 如果 capture_once 开启了流，关闭它
+            if self._stream_on:
+                try:
+                    self._device.stream_off()
+                except Exception:
+                    pass
+                self._stream_on = False
+            
             # 关闭设备
             if self._device is not None:
                 self._device.close_device()
@@ -1097,7 +1106,8 @@ class CameraManager:
     
     def capture_once(self, timeout_ms: int = 3000) -> Optional[Tuple[int, int, int, bytes]]:
         """
-        单次拍照（在连续采集模式下）。
+        单次拍照。
+        每次拍照时临时开启数据流，拍照完成后立即关闭，避免持续占用资源。
         
         Args:
             timeout_ms: 超时时间（毫秒）
@@ -1109,6 +1119,9 @@ class CameraManager:
             log_warning("相机未打开")
             return None
         
+        stream_started_here = False
+        data_stream = None
+        
         try:
             # 确保流已开启
             if self._device.data_stream:
@@ -1117,12 +1130,11 @@ class CameraManager:
                 log_error("设备没有数据流")
                 return None
             
-            # 如果流未开启，开启它
-            try:
-                # 检查是否已开启（通过尝试获取图像来检测）
-                pass
-            except Exception:
+            # 如果流未开启，临时开启它
+            if not self._stream_on:
                 self._device.stream_on()
+                self._stream_on = True
+                stream_started_here = True
             
             # 获取图像
             raw_image = data_stream.get_image(timeout_ms)
@@ -1148,6 +1160,15 @@ class CameraManager:
         except Exception as e:
             log_error(f"单次拍照异常: {e}")
             return None
+        
+        finally:
+            # 如果是在本次调用中开启的流，拍照完成后立即关闭
+            if stream_started_here:
+                try:
+                    self._device.stream_off()
+                except Exception:
+                    pass
+                self._stream_on = False
     
     # ---- 图像显示工具 ----
     

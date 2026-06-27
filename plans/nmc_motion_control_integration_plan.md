@@ -2,287 +2,191 @@
 
 ## 1. 概述
 
-将 NMC_SDK_TEST 项目中的 NMC3401 运动控制卡 SDK 集成到 VisionTest2.0 视觉检测系统中，提供独立的运动控制调试面板，并为后续自动测试工作流中的定点移动功能奠定基础。
+将 NMC_SDK_TEST 项目中的 NMC3401 运动控制卡功能集成到 VisionTest2.0 视觉检测系统中。
+
+### 集成方式
+- 菜单栏「通信」下添加「运动控制」菜单项
+- 点击后打开独立对话框（类似现有的串口通信对话框）
+- 与视觉检测流水线联动（后续实现）
+
+### 文件组织
+| 源文件 | 目标位置 | 说明 |
+|--------|----------|------|
+| `nmc_sdk.py` | `core/nmc_sdk.py` | NMC3401 DLL 封装，核心模块 |
+| `nmc_gui.py` | `ui/widgets/nmc_control_dialog.py` | 运动控制对话框 UI（重构为 QDialog） |
+| `main.py` (NMC) | 不需要 | 入口逻辑合并到 main_window.py |
 
 ---
 
-## 2. 你需要提前准备的事项
+## 2. 详细实施步骤
 
-### 2.1 硬件准备
-- **NMC3401 运动控制卡**（已安装到工控机 PCIe 插槽）
-- **MCDLL_NET.dll** 驱动文件（已存在于 NMC_SDK_TEST 项目目录中）
-- **伺服驱动器与电机**（连接至控制卡对应轴接口）
-- **光照传感器 + 继电器 + 控制板 IO**（用于后续自动测试触发）
+### 步骤 1：复制 nmc_sdk.py 到 core/ 目录
 
-### 2.2 软件准备
-- **拷贝 DLL 文件**：将 `D:\Python project\NMC_SDK_TEST\MCDLL_NET.dll` 复制到 `D:\Python project\VisionTest2.0\` 项目根目录
-- **确认 DLL 依赖**：运行 `check_dll.py` 验证 DLL 能否正常加载（该脚本会检查所有导出函数）
-- **确认控制卡 IP/网络配置**：NMC3401 通过以太网通信，需确认控制卡的 IP 地址和端口号（默认通常为 192.168.0.11:502）
+**文件**: `core/nmc_sdk.py`
 
-### 2.3 无需准备
-- **无需安装额外 Python 包**：NMC SDK 使用 `ctypes`（Python 内置模块）与 DLL 交互，VisionTest2.0 现有依赖已满足需求
-- **无需修改现有代码逻辑**：集成采用"新增文件 + 菜单入口"模式，不影响现有功能
+- 将 `NMC_SDK_TEST/nmc_sdk.py` 完整复制到 `core/nmc_sdk.py`
+- 无需修改，DLL 路径使用默认值即可（VisionTest2.0 根目录已有 MCDLL_NET.dll）
 
----
+### 步骤 2：创建 nmc_control_dialog.py
 
-## 3. 集成架构
+**文件**: `ui/widgets/nmc_control_dialog.py`
 
-```mermaid
-flowchart TD
-    subgraph VisionTest2.0[VisionTest2.0 项目]
-        MW[main_window.py 主窗口]
-        ND[nmc_dialog.py 运动控制对话框 - 新增]
-        SDK[nmc_sdk.py SDK封装 - 新增]
-        WF[serial_test_workflow.py 自动测试工作流]
-        
-        MW -->|菜单: 设备 > 运动控制| ND
-        ND -->|ctypes调用| DLL[MCDLL_NET.dll]
-        SDK --> DLL
-        ND --> SDK
-        WF -.->|后续集成| SDK
-    end
-    
-    subgraph Hardware[硬件层]
-        CARD[NMC3401 控制卡]
-        SERVO[伺服驱动器/电机]
-        CAM[工业相机]
-        SENSOR[光照传感器]
-        RELAY[继电器]
-        IO[控制板IO]
-    end
-    
-    DLL -->|以太网通信| CARD
-    CARD --> SERVO
-    CAM -->|以太网通信| MW
-    SENSOR --> RELAY --> IO
-    IO -->|以太网通信| CARD
-```
+基于 `nmc_gui.py` 重构为 `QDialog`，参考 `serial_dialog.py` 的模式：
 
----
-
-## 4. 需要新增/修改的文件
-
-### 4.1 新增文件
-
-#### 文件 1: `core/nmc_sdk.py` — NMC3401 SDK 封装层
-
-**来源**：从 `NMC_SDK_TEST/nmc_sdk.py` 移植，保持核心功能不变
-
-**内容**：
-- `NMCSDK` 类：封装 MCDLL_NET.dll 的所有函数
-  - 初始化/连接：`load_dll()`, `open_net()`, `close_net()`
-  - 轴控制：`set_servo_enable()`, `get_position()`, `set_position()`
-  - 运动控制：`jog()`, `uniaxial()`, `axis_stop()`, `emergency_stop_all()`
-  - 参数配置：`set_axis_profile()`, `set_pulse_mode()`, `set_soft_limit()`
-  - 回零操作：`search_home_set()`, `search_home_start()`, `search_home_get_state()`
-  - 状态查询：`get_axis_state()`, `get_servo_enable()`, `get_all_positions()`
-- 异常类：`NMCError`, `NMCConnectionError`, `NMCRuntimeError`
-- 常量定义：轴编号、脉冲模式、伺服状态、停止模式等
-
-**与原始文件的差异**：
-- 移除 GUI 相关依赖
-- 适配 VisionTest2.0 的日志系统（使用 `core/log_manager.py` 的 `log_error`/`log_info`）
-- 路径处理：DLL 路径相对于项目根目录
-
-#### 文件 2: `ui/widgets/nmc_dialog.py` — NMC 运动控制对话框
-
-**参考模式**：`ui/widgets/serial_dialog.py`（独立 QDialog，从菜单打开）
-
-**功能布局**（参考 `nmc_gui.py` 的 Tab 设计）：
-
-```
-┌─────────────────────────────────────────────────┐
-│  NMC3401 运动控制面板                     [X]   │
-├─────────────────────────────────────────────────┤
-│  状态栏: ● 已连接 | 轴1: 0.00 | 轴2: 0.00 ...  │
-├───────┬─────────┬──────────┬────────────────────┤
-│ 初始化 │ 轴参数  │  回零    │     运动控制       │
-├───────┴─────────┴──────────┴────────────────────┤
-│                                                   │
-│  Tab 1 - 初始化:                                  │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ IP地址: [192.168.0.11]  端口: [502]         │  │
-│  │ [连接]  [断开]  [紧急停止]                   │  │
-│  │ 系统信息: 版本号 序列号 运行时间             │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                   │
-│  Tab 2 - 轴参数:                                  │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ 轴选择: [▼ 轴1]                             │  │
-│  │ 脉冲模式: [▼ 脉冲+方向]   [设置]            │  │
-│  │ 命令位置: [0]   [设置]                       │  │
-│  │ 编码器位置: [0]   [设置]                     │  │
-│  │ 软件限位+: [100000]  软件限位-: [-100000]   │  │
-│  │ [设置限位]  [使能限位]                       │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                   │
-│  Tab 3 - 回零:                                    │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ 轴选择: [▼ 轴1]                             │  │
-│  │ 回零模式: [▼ 模式1]  速度: [10000]          │  │
-│  │ [开始回零]  [停止回零]                       │  │
-│  │ 状态: 回零中...                              │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                   │
-│  Tab 4 - 运动控制:                                │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ 轴选择: [▼ 轴1]                             │  │
-│  │ ┌─────────────────────────────────────────┐ │  │
-│  │ │  JOG控制:  [正转] [停止] [反转]         │ │  │
-│  │ │  速度: [10000]  加速度: [1000]           │ │  │
-│  │ └─────────────────────────────────────────┘ │  │
-│  │ ┌─────────────────────────────────────────┐ │  │
-│  │ │  定点运动:                               │ │  │
-│  │ │  目标位置: [0]  速度: [10000]           │ │  │
-│  │ │  加速度: [1000]  减速度: [1000]          │ │  │
-│  │ │  [启动]  [停止]                          │ │  │
-│  │ └─────────────────────────────────────────┘ │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                   │
-│  日志输出区域:                                    │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ [12:00:01] 连接成功                         │  │
-│  │ [12:00:02] 轴1 伺服使能                     │  │
-│  │ ...                                         │  │
-│  └─────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
-```
-
-**核心功能**：
-- 连接管理：IP/端口配置，连接/断开/紧急停止
-- 轴参数配置：脉冲模式、命令位置、编码器位置、软件限位
-- 回零操作：多种回零模式，实时监测回零状态
-- JOG 点动：正转/反转/停止，带软件限位自动恢复
-- 定点运动：设置目标位置、速度/加速度参数，启动/停止
-- 实时状态刷新：定时器周期性读取各轴位置和状态
-- 日志输出：带时间戳的操作日志
-
-### 4.2 修改文件
-
-#### 文件 3: `ui/main_window.py` — 主窗口
-
-**修改内容**：
-1. 在 `_setup_menu_bar()` 方法的"设备"菜单中添加"运动控制"菜单项
-2. 添加 `_open_nmc_dialog()` 方法（参考 `_open_serial_dialog()` 模式）
-3. 在 `__init__()` 中添加 `self._nmc_sdk = None` 属性（可选，用于共享 SDK 实例）
-
-**代码变更示例**：
-
+#### 2.1 类结构
 ```python
-# 在 _setup_menu_bar() 的 device_menu 中添加
+class NMCControlDialog(QDialog):
+    """NMC3401 运动控制卡对话框"""
+    
+    # 信号
+    nmc_connected = pyqtSignal(bool)  # 连接状态变化
+    motion_completed = pyqtSignal(int, bool)  # (axis, success) 运动完成信号
+    
+    def __init__(self, parent=None):
+        ...
+```
+
+#### 2.2 UI 布局（保留 nmc_gui.py 的 5 个标签页）
+1. **初始化** - 连接/断开控制卡、系统信息显示
+2. **IO 监测** - 数字输入/输出状态实时显示
+3. **轴参数** - 脉冲模式、命令位置、编码器位置、软限位设置
+4. **回零** - 三阶段回零控制（搜索→减速→精定位）
+5. **点位运动** - JOG 点动、单轴运动、曲线参数设置
+
+#### 2.3 与 nmc_gui.py 的主要差异
+| 项目 | nmc_gui.py (原始) | nmc_control_dialog.py (新) |
+|------|-------------------|---------------------------|
+| 基类 | QMainWindow | QDialog |
+| 窗口管理 | 独立窗口 | 模态对话框 |
+| 生命周期 | 独立管理 | 由 MainWindow 管理 |
+| 样式 | 独立样式 | 继承 VisionTest2.0 暗色主题 |
+| 日志 | 独立 LogHandler | 复用 core/log_manager.py |
+| 配置持久化 | 无 | 复用 core/config_manager.py |
+| 联动接口 | 无 | 添加 motion_completed 信号 |
+
+### 步骤 3：修改 main_window.py
+
+**文件**: `ui/main_window.py`
+
+#### 3.1 在 `__init__` 中添加 NMC 相关成员
+```python
+# NMC 运动控制
+self._nmc_sdk: Optional[NMCSDK] = None
+self._nmc_dialog: Optional[NMCControlDialog] = None
+```
+
+#### 3.2 在 `_setup_menu_bar` 中添加菜单项
+在「通信」菜单中添加「运动控制」菜单项：
+```python
+# 在 comm_menu 中添加
 self.act_nmc_control = QAction("运动控制", self)
 self.act_nmc_control.triggered.connect(self._open_nmc_dialog)
-device_menu.addAction(self.act_nmc_control)
+comm_menu.addAction(self.act_nmc_control)
+```
 
-# 新增方法
+#### 3.3 添加 `_open_nmc_dialog` 方法
+```python
 def _open_nmc_dialog(self):
-    """打开 NMC 运动控制面板。"""
-    from .widgets.nmc_dialog import NMCDialog
-    dialog = NMCDialog(self)
+    """打开运动控制卡对话框。"""
+    from .widgets.nmc_control_dialog import NMCControlDialog
+    if self._nmc_sdk is None:
+        self._nmc_sdk = NMCSDK()
+    dialog = NMCControlDialog(self, nmc_sdk=self._nmc_sdk)
     dialog.exec_()
 ```
 
-#### 文件 4: `core/__init__.py` — 核心模块初始化
-
-**修改内容**：无需修改（Python 自动发现子模块）
-
-#### 文件 5: `ui/widgets/__init__.py` — UI 组件初始化
-
-**修改内容**：无需修改（Python 自动发现子模块）
-
----
-
-## 5. 后续集成：自动测试工作流中的定点移动
-
-### 5.1 远期架构
-
-```mermaid
-flowchart LR
-    SENSOR[光照传感器] -->|硬件连接| RELAY[继电器]
-    RELAY -->|硬件连接| IO[控制板IO]
-    IO -->|以太网通信| CARD[NMC3401控制卡]
-    CARD -->|检测到IO变化| WF[自动测试工作流]
-    WF -->|uniaxial| CARD
-    CARD -->|移动到点位1| CAM[工业相机]
-    CAM -->|以太网通信拍照| VISION[视觉识别]
-    VISION -->|结果| WF
-    WF -->|uniaxial| CARD
-    CARD -->|移动到点位2| CAM
-    CAM -->|拍照| VISION
-    VISION -->|结果| WF
-    WF -->|...循环至所有点位...| CARD
-    WF -->|完成| END[结束]
+#### 3.4 在 `closeEvent` 中添加 NMC 清理
+```python
+# 关闭 NMC
+if self._nmc_sdk is not None:
+    try:
+        self._nmc_sdk.close_net()
+    except Exception:
+        pass
+    self._nmc_sdk = None
 ```
 
-### 5.2 需要新增的组件（后续阶段）
+### 步骤 4：与视觉检测联动（后续实现）
 
-- **`core/nmc_test_workflow.py`**：扩展 `SerialTestWorkflow`，增加 NMC 定点移动步骤
-- **点位配置数据结构**：在方案（Scheme）中增加点位列表配置
-- **UI 点位编辑界面**：在方案编辑器中增加点位设置界面
+> ⚠️ **注意**：您提到后续会提供测试流程，这里先预留接口，具体联动逻辑待您提供流程后再设计。
 
-### 5.3 集成点
+#### 4.1 预留联动架构
 
-| 触发时机 | 动作 | 说明 |
-|---------|------|------|
-| 光照传感器触发 | 控制板IO电平变化 | 传感器→继电器→控制板IO，硬件直连 |
-| IO变化 | NMC3401检测到IO输入变化 | 通过SDK读取IO状态，启动测试流程 |
-| 测试开始 | 移动到第1个点位 | `nmc_sdk.uniaxial(axis, dist, 0)` |
-| 到达点位 | 相机以太网通信拍照 | 等待轴停止后，通过SDK触发相机 |
-| 识别完成 | 移动到下一个点位 | 循环直到所有点位完成 |
-| 所有点位完成 | 发送结果 + 复位 | 回到原点或等待下次触发 |
+联动方式建议采用 **「NMC 工作流 + 视觉检测工作流」组合模式**，类似现有的 `SerialTestWorkflow`：
 
----
+```mermaid
+flowchart TD
+    A[NMC 运动完成] --> B{检测触发方式?}
+    B -->|自动触发| C[拍照]
+    B -->|手动触发| D[等待操作员确认]
+    C --> E[视觉检测]
+    E --> F{检测结果}
+    F -->|OK| G[NMC 移动到下一位置]
+    F -->|NG| H[记录/报警/重测]
+    G --> A
+```
 
-## 6. 实施步骤
+#### 4.2 预留信号接口
 
-### 步骤 1：准备环境
-- [ ] 将 `MCDLL_NET.dll` 复制到 VisionTest2.0 项目根目录
-- [ ] 运行 `check_dll.py` 验证 DLL 加载
-- [ ] 确认控制卡网络连接正常
+在 `NMCControlDialog` 中已预留 `motion_completed` 信号，后续可通过此信号触发检测流程：
 
-### 步骤 2：创建 SDK 封装层
-- [ ] 创建 `core/nmc_sdk.py`（从 NMC_SDK_TEST 移植）
-- [ ] 适配 VisionTest2.0 的日志系统
-- [ ] 验证 SDK 基本功能（加载 DLL、连接控制卡）
+```python
+# 在 MainWindow 中连接
+self._nmc_dialog.motion_completed.connect(self._on_nmc_motion_completed)
 
-### 步骤 3：创建运动控制对话框
-- [ ] 创建 `ui/widgets/nmc_dialog.py`
-- [ ] 实现连接管理界面（IP/端口配置）
-- [ ] 实现轴参数配置界面
-- [ ] 实现回零操作界面
-- [ ] 实现 JOG 和定点运动控制界面
-- [ ] 实现实时状态刷新和日志输出
-
-### 步骤 4：集成到主窗口
-- [ ] 在 `main_window.py` 的"设备"菜单中添加"运动控制"菜单项
-- [ ] 实现 `_open_nmc_dialog()` 方法
-
-### 步骤 5：测试验证
-- [ ] 启动程序，通过菜单打开运动控制面板
-- [ ] 连接控制卡，测试各轴基本功能
-- [ ] 测试 JOG 点动、定点运动、回零等操作
-- [ ] 验证紧急停止功能
+def _on_nmc_motion_completed(self, axis: int, success: bool):
+    """NMC 运动完成回调 - 触发视觉检测"""
+    if success and self._nmc_auto_test_enabled:
+        # 1. 拍照
+        self._capture()
+        # 2. 检测（在 _on_capture_completed 中触发）
+        self._pending_detect = True
+        # 3. 根据检测结果控制 NMC 下一步动作
+```
 
 ---
 
-## 7. 文件清单汇总
+## 3. 文件修改清单
 
-| 操作 | 文件路径 | 说明 |
-|------|---------|------|
-| ✅ 新增 | `core/nmc_sdk.py` | NMC3401 SDK 封装层（~500 行） |
-| ✅ 新增 | `ui/widgets/nmc_dialog.py` | 运动控制对话框（~800 行） |
-| 🔧 修改 | `ui/main_window.py` | 添加菜单项和打开对话框方法（~20 行） |
-| 📋 复制 | `MCDLL_NET.dll` → 项目根目录 | DLL 驱动文件 |
-| 📋 参考 | `NMC_SDK_TEST/nmc_sdk.py` | SDK 原始代码 |
-| 📋 参考 | `NMC_SDK_TEST/nmc_gui.py` | GUI 原始代码（UI 设计参考） |
-| 📋 参考 | `ui/widgets/serial_dialog.py` | 对话框实现模式参考 |
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `core/nmc_sdk.py` | **新建** | 从 NMC_SDK_TEST 复制，无需修改 |
+| `ui/widgets/nmc_control_dialog.py` | **新建** | 基于 nmc_gui.py 重构为 QDialog |
+| `ui/main_window.py` | **修改** | 添加菜单项、打开方法、清理逻辑 |
+| `requirements.txt` | **无需修改** | NMC 仅依赖 PyQt5，已存在 |
 
 ---
 
-## 8. 风险与注意事项
+## 4. 关键设计决策
 
-1. **DLL 依赖**：`MCDLL_NET.dll` 必须存在于项目根目录或系统 PATH 中，否则程序启动时无法加载
-2. **硬件依赖**：未连接 NMC3401 控制卡时，打开对话框会显示"未连接"状态，但不会崩溃
-3. **线程安全**：SDK 调用应在非 UI 线程执行长时间操作（如回零监测），避免阻塞界面
-4. **紧急停止**：必须在界面显眼位置提供紧急停止按钮，确保安全
-5. **软件限位**：JOG 操作必须配合软件限位，防止超程损坏设备
+### 4.1 DLL 加载
+- `MCDLL_NET.dll` 已在 VisionTest2.0 根目录
+- `NMCSDK.__init__` 默认在当前目录查找 DLL，无需额外配置
+- 与相机 SDK 共用同一 DLL 文件（已确认）
+
+### 4.2 样式适配
+- `nmc_gui.py` 有独立的暗色样式
+- 重构为 `QDialog` 后，样式需与 VisionTest2.0 的暗色主题保持一致
+- 参考 `serial_dialog.py` 的样式写法
+
+### 4.3 配置持久化
+- 使用 `ConfigManager` 保存 NMC 对话框的配置（如上次连接的 IP/端口）
+- 配置前缀：`nmc_control`
+
+### 4.4 生命周期管理
+- `NMCSDK` 实例由 `MainWindow` 持有（单例），对话框关闭时不销毁
+- 对话框关闭时不断开控制卡连接，保持连接状态
+- 系统关闭时自动断开
+
+---
+
+## 5. 后续联动方案待讨论
+
+您提到后续会提供测试流程，以下是几个需要一起讨论的设计问题：
+
+1. **触发方式**：NMC 运动到位后，是自动触发拍照检测，还是等待外部信号/操作员确认？
+2. **检测结果反馈**：检测 NG 时，NMC 应如何处理？（停止/报警/重测/跳过）
+3. **多位置序列**：是否需要在方案中配置多个检测位置，NMC 按顺序移动？
+4. **与现有串口工作流的关系**：NMC 联动是否会替代现有的串口触发工作流，还是两者共存？
+
+这些可以在您提供测试流程后再细化设计。

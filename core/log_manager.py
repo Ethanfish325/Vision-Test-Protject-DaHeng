@@ -85,13 +85,14 @@ def _cleanup_old_logs(max_size: int, cleanup_ratio: float):
 class _SizeCheckTimedRotatingFileHandler(TimedRotatingFileHandler):
     """
     继承 TimedRotatingFileHandler，在每次实际写入日志后检查并清理日志空间。
+    清理操作在后台线程中执行，避免磁盘 I/O 阻塞日志写入。
     """
 
     def __init__(self, *args, **kwargs):
         self._max_log_size: int = kwargs.pop('max_log_size', _DEFAULT_MAX_LOG_SIZE)
         self._cleanup_ratio: float = kwargs.pop('cleanup_ratio', _DEFAULT_CLEANUP_RATIO)
         self._last_check_time: float = 0
-        self._check_interval: float = 60.0  # 两次检查的最小间隔（秒），避免频繁扫描磁盘
+        self._check_interval: float = 300.0  # 两次检查的最小间隔（秒），5分钟检查一次
         self._lock = threading.Lock()
         super().__init__(*args, **kwargs)
 
@@ -102,10 +103,21 @@ class _SizeCheckTimedRotatingFileHandler(TimedRotatingFileHandler):
         if now - self._last_check_time >= self._check_interval:
             self._last_check_time = now
             if self._lock.acquire(blocking=False):
-                try:
-                    _cleanup_old_logs(self._max_log_size, self._cleanup_ratio)
-                finally:
-                    self._lock.release()
+                # 在后台线程执行清理，避免磁盘 I/O 阻塞日志写入
+                t = threading.Thread(
+                    target=self._do_cleanup,
+                    daemon=True,
+                )
+                t.start()
+
+    def _do_cleanup(self):
+        """在后台线程执行日志清理"""
+        try:
+            _cleanup_old_logs(self._max_log_size, self._cleanup_ratio)
+        except Exception:
+            pass  # 清理失败不影响主流程
+        finally:
+            self._lock.release()
 
 
 class LogManager:

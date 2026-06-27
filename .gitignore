@@ -28,3 +28,6 @@ data/config.json
 # OS
 Thumbs.db
 .DS_Store
+
+# DLL dependencies - too large for git, need manual placement
+*.dll

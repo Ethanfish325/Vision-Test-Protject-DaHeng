@@ -597,8 +597,8 @@ class CameraPanel(QWidget):
                 QMessageBox.critical(self, "错误", "打开相机失败，请检查相机连接")
                 return
 
-            # 开始实时取流
-            self.cam_mgr.start_grabbing(self._on_frame_received)
+            # 不启动实时取流，仅在需要时拍照（capture_once）
+            # 避免后台取流线程持续占用CPU和主线程资源
 
             # 更新 UI 状态
             self.open_btn.setEnabled(False)
@@ -607,7 +607,7 @@ class CameraPanel(QWidget):
             self.trigger_combo.setEnabled(True)
             self.trigger_btn.setEnabled(self.cam_mgr.is_trigger_mode)
             self.display_label.clear_pixmap()
-            self.display_label.setText("实时画面中...")
+            self.display_label.setText("相机已就绪，点击「拍照」获取图像")
 
             # 关闭自动曝光和自动增益，使用固定参数
             self.cam_mgr.set_enum_param("ExposureAuto", 0)  # GxAutoEntry.OFF

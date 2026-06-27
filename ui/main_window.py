@@ -30,6 +30,7 @@ from .widgets.result_panel import ResultPanel
 
 from core.serial_comm import SerialCommManager
 from core.serial_test_workflow import SerialTestWorkflow, WorkflowConfig
+from core.nmc_sdk import NMCSDK
 
 import hashlib
 from core.paths import USERS_FILE
@@ -102,6 +103,69 @@ class StepLogPanel(QWidget):
         self.log_text.clear()
 
 
+class DetectWorker(QThread):
+    """后台检测工作线程，避免阻塞UI"""
+    finished = pyqtSignal(bool, str, np.ndarray, object)  # passed, message, annotated, results
+
+    def __init__(self, vision_engine, raw_image, scheme_name):
+        super().__init__()
+        self._vision_engine = vision_engine
+        self._raw_image = raw_image
+        self._scheme_name = scheme_name
+
+    def run(self):
+        try:
+            passed, message, annotated = self._vision_engine.execute(
+                self._raw_image, scheme_name=self._scheme_name
+            )
+            results = self._vision_engine.get_last_results()
+            self.finished.emit(passed, message, annotated, results)
+        except Exception as e:
+            self.finished.emit(False, f"检测异常: {str(e)}", self._raw_image, [])
+
+
+class EngineerTestWorker(QThread):
+    """后台工程师测试工作线程，避免阻塞UI"""
+    finished = pyqtSignal(bool, str, np.ndarray, object)  # passed, message, annotated, results
+
+    def __init__(self, vision_engine, raw_image, scheme_name):
+        super().__init__()
+        self._vision_engine = vision_engine
+        self._raw_image = raw_image
+        self._scheme_name = scheme_name
+
+    def run(self):
+        try:
+            passed, message, annotated = self._vision_engine.execute(
+                self._raw_image, scheme_name=self._scheme_name
+            )
+            results = self._vision_engine.get_last_results()
+            self.finished.emit(passed, message, annotated, results)
+        except Exception as e:
+            self.finished.emit(False, f"测试异常: {str(e)}", self._raw_image, [])
+
+
+class WorkflowTestWorker(QThread):
+    """后台工作流测试工作线程，避免阻塞UI"""
+    finished = pyqtSignal(bool, str, np.ndarray, object)  # passed, message, annotated, results
+
+    def __init__(self, vision_engine, image, scheme_name):
+        super().__init__()
+        self._vision_engine = vision_engine
+        self._image = image
+        self._scheme_name = scheme_name
+
+    def run(self):
+        try:
+            passed, message, annotated = self._vision_engine.execute(
+                self._image, scheme_name=self._scheme_name
+            )
+            results = self._vision_engine.get_last_results()
+            self.finished.emit(passed, message, annotated, results)
+        except Exception as e:
+            self.finished.emit(False, f"自动测试异常: {str(e)}", self._image, [])
+
+
 class MainWindow(QMainWindow):
 
     def __init__(self):
@@ -109,6 +173,9 @@ class MainWindow(QMainWindow):
         self.config = ConfigManager()
         self.camera_mgr = CameraManager()
         self.vision_engine = VisionEngine()
+        self._detect_worker = None  # 后台检测线程
+        self._eng_test_worker = None  # 后台工程师测试线程
+        self._workflow_test_worker = None  # 后台工作流测试线程
 
         self._raw_image = None
         self._raw_width = 0
@@ -140,6 +207,9 @@ class MainWindow(QMainWindow):
         # 串口通信与自动测试
         self._serial_comm: Optional[SerialCommManager] = None
         self._serial_workflow: Optional[SerialTestWorkflow] = None
+
+        # 运动控制卡
+        self._nmc_sdk: Optional[NMCSDK] = None
 
         self._setup_ui()
         self._load_schemes()
@@ -860,6 +930,9 @@ class MainWindow(QMainWindow):
         self.act_serial_comm = QAction("串口通信", self)
         self.act_serial_comm.triggered.connect(self._open_serial_dialog)
         comm_menu.addAction(self.act_serial_comm)
+        self.act_nmc_control = QAction("运动控制", self)
+        self.act_nmc_control.triggered.connect(self._open_nmc_dialog)
+        comm_menu.addAction(self.act_nmc_control)
 
         # ── 用户菜单 ──
         user_menu = menubar.addMenu("用户")
@@ -1487,9 +1560,12 @@ class MainWindow(QMainWindow):
 
     def _execute_engineer_test(self):
         """执行设计模式流水线测试（内部方法，_raw_image 必须非空）"""
+        # 如果已有测试线程在运行，不重复启动
+        if self._eng_test_worker is not None and self._eng_test_worker.isRunning():
+            return
+
         self.eng_btn_run_preview.setEnabled(False)
         self.eng_btn_run_preview.setText("执行中...")
-        QApplication.processEvents()
 
         self.eng_log.clear_log()
         self.eng_time_label.setText("")
@@ -1497,14 +1573,17 @@ class MainWindow(QMainWindow):
         self.eng_log.append_info(f"══════ 流水线测试开始 ══════", "#4fc3f7")
         self.eng_log.append_info(f"方案: {self._current_scheme_name or '未命名'}", "#888")
 
+        # 在后台线程执行检测，避免阻塞UI
+        scheme_name = self._current_scheme_name or "未命名"
+        self._eng_test_worker = EngineerTestWorker(
+            self.vision_engine, self._raw_image.copy(), scheme_name
+        )
+        self._eng_test_worker.finished.connect(self._on_engineer_test_finished)
+        self._eng_test_worker.start()
+
+    def _on_engineer_test_finished(self, passed, message, annotated, results):
+        """工程师测试完成回调（主线程执行，安全更新UI）"""
         try:
-            scheme_name = self._current_scheme_name or "未命名"
-            passed, message, annotated = self.vision_engine.execute(
-                self._raw_image, scheme_name=scheme_name
-            )
-
-            results = self.vision_engine.get_last_results()
-
             # 存储步骤结果用于导航
             self._step_results = list(results) if results else []
             self._annotated_image = annotated
@@ -1552,16 +1631,17 @@ class MainWindow(QMainWindow):
 
             status = "OK" if passed else "NG"
             self.status_label.setText(f"测试完成: {status}")
-            log_info(f"工程师测试完成: {status} | 方案={scheme_name}")
+            log_info(f"工程师测试完成: {status} | 方案={self._current_scheme_name or '未命名'}")
 
         except Exception as e:
-            log_error(f"测试异常: {e}")
+            log_error(f"测试结果处理异常: {e}")
             self.eng_result_panel.show_result(False, f"测试异常: {str(e)}")
             self.eng_log.append_info(f"✗ 执行异常: {str(e)}", "#ff5252")
             self.status_label.setText("测试异常")
         finally:
             self.eng_btn_run_preview.setEnabled(True)
             self.eng_btn_run_preview.setText("📷 测试")
+            self._eng_test_worker = None
 
     def _do_detect(self):
         # 如果没有图像，先自动拍照
@@ -1573,7 +1653,6 @@ class MainWindow(QMainWindow):
             self.worker_status_label.setText("正在拍照...")
             self.worker_btn_detect.setEnabled(False)
             self.worker_btn_detect.setText("拍照中...")
-            QApplication.processEvents()
             self._camera_panel.capture_once()
             # 拍照完成后 _on_capture_completed 会再次调用 _do_detect
             self._pending_detect = True
@@ -1583,24 +1662,30 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "请先选择并应用一个方案")
             return
 
+        # 如果已有检测线程在运行，不重复启动
+        if self._detect_worker is not None and self._detect_worker.isRunning():
+            return
+
         self.worker_btn_detect.setEnabled(False)
         self.worker_btn_detect.setText("检测中...")
         self.status_label.setText("检测中...")
         self.worker_status_label.setText("检测中...")
-        QApplication.processEvents()
 
         self.worker_log.clear_log()
         self.worker_time_label.setText("")
         self.worker_log.append_info(f"══════ 检测开始 ══════", "#4fc3f7")
 
+        # 在后台线程执行检测，避免阻塞UI
+        scheme_name = self._current_scheme_name or "未命名"
+        self._detect_worker = DetectWorker(
+            self.vision_engine, self._raw_image.copy(), scheme_name
+        )
+        self._detect_worker.finished.connect(self._on_detect_finished)
+        self._detect_worker.start()
+
+    def _on_detect_finished(self, passed, message, annotated, results):
+        """检测完成回调（主线程执行，安全更新UI）"""
         try:
-            scheme_name = self._current_scheme_name or "未命名"
-            passed, message, annotated = self.vision_engine.execute(
-                self._raw_image, scheme_name=scheme_name
-            )
-
-            results = self.vision_engine.get_last_results()
-
             if passed:
                 self.worker_judge.setText("✓ OK")
                 self.worker_judge.setStyleSheet("""
@@ -1632,7 +1717,6 @@ class MainWindow(QMainWindow):
 
             self.worker_log.append_separator()
             total_ms = sum(r.elapsed_ms for r in results)
-            # 更新总测试时间显示
             self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
             if passed:
                 self.worker_log.append_info(
@@ -1643,10 +1727,10 @@ class MainWindow(QMainWindow):
 
             status = "OK" if passed else "NG"
             self.status_label.setText(f"检测完成: {status}")
-            log_info(f"检测完成: {status} | 方案={scheme_name}")
+            log_info(f"检测完成: {status} | 方案={self._current_scheme_name or '未命名'}")
 
         except Exception as e:
-            log_error(f"检测异常: {e}")
+            log_error(f"检测结果处理异常: {e}")
             self.worker_judge.setText("✗ 异常")
             self.worker_judge.setStyleSheet("""
                 font-size: 32px; font-weight: bold; padding: 6px 28px;
@@ -1664,6 +1748,7 @@ class MainWindow(QMainWindow):
             self._raw_image = None
             self._raw_width = 0
             self._raw_height = 0
+            self._detect_worker = None
 
     def _show_log_settings(self):
         """打开日志限额设置对话框"""
@@ -1856,6 +1941,14 @@ class MainWindow(QMainWindow):
         # 对话框关闭后，根据串口状态更新自动测试按钮
         self._update_auto_test_btn_state()
 
+    def _open_nmc_dialog(self):
+        """打开运动控制卡窗口（共享 NMCSDK 实例）。"""
+        from .widgets.nmc_control_dialog import NMCControlDialog
+        if self._nmc_sdk is None:
+            self._nmc_sdk = NMCSDK()
+        dialog = NMCControlDialog(self, nmc_sdk=self._nmc_sdk)
+        dialog.exec_()
+
     # ──────────────────────────────────────────────
     # 串口自动测试工作流
     # ──────────────────────────────────────────────
@@ -1964,12 +2057,20 @@ class MainWindow(QMainWindow):
             self._serial_workflow.on_test_completed(False, "未设置检测方案")
             return
 
-        try:
-            scheme_name = self._current_scheme_name or "未命名"
-            passed, message, annotated = self.vision_engine.execute(
-                image, scheme_name=scheme_name
-            )
+        # 如果已有工作流测试线程在运行，不重复启动
+        if self._workflow_test_worker is not None and self._workflow_test_worker.isRunning():
+            return
 
+        scheme_name = self._current_scheme_name or "未命名"
+        self._workflow_test_worker = WorkflowTestWorker(
+            self.vision_engine, image.copy(), scheme_name
+        )
+        self._workflow_test_worker.finished.connect(self._on_workflow_test_finished)
+        self._workflow_test_worker.start()
+
+    def _on_workflow_test_finished(self, passed, message, annotated, results):
+        """工作流测试完成回调（主线程执行，安全更新UI）"""
+        try:
             # 更新显示
             if annotated is not None:
                 self._last_annotated = annotated
@@ -1994,7 +2095,6 @@ class MainWindow(QMainWindow):
                 """)
 
             # 记录日志
-            results = self.vision_engine.get_last_results()
             self.worker_log.clear_log()
             self.worker_time_label.setText("")
             self.worker_log.append_info(
@@ -2021,8 +2121,10 @@ class MainWindow(QMainWindow):
             self._serial_workflow.on_test_completed(passed, message)
 
         except Exception as e:
-            log_error(f"自动测试检测异常: {e}")
+            log_error(f"自动测试结果处理异常: {e}")
             self._serial_workflow.on_test_completed(False, str(e))
+        finally:
+            self._workflow_test_worker = None
 
     def _on_workflow_error(self, error_msg: str):
         """工作流错误处理。"""
@@ -2041,6 +2143,14 @@ class MainWindow(QMainWindow):
         if self._serial_comm is not None:
             self._serial_comm.cleanup()
             self._serial_comm = None
+        # 关闭运动控制卡
+        if self._nmc_sdk is not None:
+            try:
+                if self._nmc_sdk._connected:
+                    self._nmc_sdk.close_net()
+            except Exception:
+                pass
+            self._nmc_sdk = None
         try:
             if self._camera_panel is not None:
                 self._camera_panel.close_camera()
