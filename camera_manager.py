@@ -1,1228 +1,1209 @@
 # -*- coding: utf-8 -*-
 """
-海康工业相机管理模块
-====================
-基于 MVS SDK 的相机操作封装，参考官方 Python DEMO 实现。
+相机管理模块 — Daheng (大恒) GalaxySDK 实现
+=============================================
+替换原有的 Hikvision MVS SDK 实现。
 
-功能：
-  - 枚举 GigE/USB 相机设备
-  - 连接/断开相机
-  - 实时取流（工作线程模式）
-  - 参数调节（曝光时间、增益、帧率）
-  - 触发模式切换（连续/软触发）
-  - 单次拍照（软触发模式）
-  - 图像格式转换（Bayer/Mono/YUV -> BGR）
-  - GigE 网络优化（自动设置包大小）
+对外接口（保持与旧版一致）：
+    CameraManager          — 相机管理器（单例模式）
+    CameraGrabbingThread   — 实时取流线程（QThread）
+    raw_to_opencv()        — 原始帧数据转 OpenCV 图像
+    is_mono_data()         — 判断是否为黑白像素格式
+    is_color_data()        — 判断是否为彩色像素格式
+    pixel_type_to_opencv() — 像素格式 → OpenCV 类型映射
 """
 
 import os
 import sys
-import time
 import ctypes
-import threading
-from typing import Optional, Callable, List, Dict, Any, Tuple
+import traceback
+from typing import Optional, Tuple, List, Dict, Any, Callable
+from enum import IntEnum
 
-import cv2
 import numpy as np
+import cv2
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 
-from core.log_manager import log_error, log_info, log_warning
-
-
 # ============================================================
-#  SDK 导入与路径配置
+# 日志工具（与项目现有日志风格保持一致）
 # ============================================================
-# 搜索顺序：
-#   1. 本地 MvImport 目录（打包后或开发环境项目目录下的）
-#   2. MVS 官方 SDK 安装目录（D:\MVS\Development\Samples\Python\MvImport）
-#
-# MvCameraControl_class.py 内部使用相对导入 (from PixelType_header import *)
-# 所以需要将 MvImport 目录本身加入 path
-# 同时 MvCameraControl_class.py 在模块加载时立即调用
-# check_sys_and_update_dll() -> WinDLL("MvCameraControl.dll")，
-# 因此还需要将 MvImport 目录设为当前工作目录，或将其加入 DLL 搜索路径。
-
-def _find_mvimport_dir() -> str:
-    """查找可用的 MvImport 目录"""
-    # 1. 检查本地项目目录下的 MvImport（打包后或开发环境）
-    local_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MvImport')
-    if os.path.isdir(local_dir):
-        return local_dir
-
-    # 2. 检查 MVS 官方 SDK 安装目录
-    mvs_dir = os.path.join(os.getenv("MVCAM_COMMON_RUNENV", "D:\\MVS\\Development"),
-                           "Samples", "Python", "MvImport")
-    if os.path.isdir(mvs_dir):
-        return mvs_dir
-
-    return local_dir  # 返回默认值，让 import 失败时走异常处理
-
-
-MVS_MVIMPORT = _find_mvimport_dir()
-if MVS_MVIMPORT not in sys.path:
-    sys.path.insert(0, MVS_MVIMPORT)
-
-# 重要：将 MvImport 目录添加到 DLL 搜索路径
-# MvCameraControl_class.py 在模块加载时立即调用
-# check_sys_and_update_dll() -> WinDLL("MvCameraControl.dll")
-# 该 DLL 及其依赖的所有 DLL 都在 MvImport 目录下
-if os.path.isdir(MVS_MVIMPORT):
-    # Windows 7+ 支持 AddDllDirectory (KB2533623)
-    try:
-        import ctypes
-        # 使用 os.add_dll_directory (Python 3.8+, Windows 8.1+)
-        os.add_dll_directory(MVS_MVIMPORT)
-    except (AttributeError, OSError):
-        # 回退：将目录加入 PATH
-        os.environ['PATH'] = MVS_MVIMPORT + os.pathsep + os.environ.get('PATH', '')
-
-# 导入 SDK 模块
 try:
-    from MvCameraControl_class import MvCamera
-    from CameraParams_header import (
-        MV_CC_DEVICE_INFO_LIST, MV_CC_DEVICE_INFO,
-        MV_FRAME_OUT, MV_FRAME_OUT_INFO_EX,
-        MVCC_FLOATVALUE, MVCC_INTVALUE, MVCC_ENUMVALUE,
-        MV_GIGE_DEVICE, MV_USB_DEVICE,
-    )
-    from MvErrorDefine_const import MV_E_CALLORDER, MV_OK
-    from PixelType_header import (
-        PixelType_Gvsp_Mono8, PixelType_Gvsp_Mono8_Signed,
-        PixelType_Gvsp_Mono10, PixelType_Gvsp_Mono10_Packed,
-        PixelType_Gvsp_Mono12, PixelType_Gvsp_Mono12_Packed,
-        PixelType_Gvsp_Mono14,
-        PixelType_Gvsp_Mono16,
-        PixelType_Gvsp_BayerGR8, PixelType_Gvsp_BayerRG8,
-        PixelType_Gvsp_BayerGB8, PixelType_Gvsp_BayerBG8,
-        PixelType_Gvsp_BayerGR10, PixelType_Gvsp_BayerRG10,
-        PixelType_Gvsp_BayerGB10, PixelType_Gvsp_BayerBG10,
-        PixelType_Gvsp_BayerGR12, PixelType_Gvsp_BayerRG12,
-        PixelType_Gvsp_BayerGB12, PixelType_Gvsp_BayerBG12,
-        PixelType_Gvsp_BayerGR10_Packed, PixelType_Gvsp_BayerRG10_Packed,
-        PixelType_Gvsp_BayerGB10_Packed, PixelType_Gvsp_BayerBG10_Packed,
-        PixelType_Gvsp_BayerGR12_Packed, PixelType_Gvsp_BayerRG12_Packed,
-        PixelType_Gvsp_BayerGB12_Packed, PixelType_Gvsp_BayerBG12_Packed,
-        PixelType_Gvsp_BayerRBGG8, PixelType_Gvsp_BayerBRGG8,
-        PixelType_Gvsp_BayerGR16, PixelType_Gvsp_BayerRG16,
-        PixelType_Gvsp_BayerGB16, PixelType_Gvsp_BayerBG16,
-        PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed,
-        PixelType_Gvsp_YUV411_Packed, PixelType_Gvsp_YUV444_Packed,
-        PixelType_Gvsp_RGB8_Packed, PixelType_Gvsp_BGR8_Packed,
-        # HB 系列
-        PixelType_Gvsp_HB_Mono8, PixelType_Gvsp_HB_Mono10,
-        PixelType_Gvsp_HB_Mono10_Packed, PixelType_Gvsp_HB_Mono12,
-        PixelType_Gvsp_HB_Mono12_Packed, PixelType_Gvsp_HB_Mono16,
-        PixelType_Gvsp_HB_BayerGR8, PixelType_Gvsp_HB_BayerRG8,
-        PixelType_Gvsp_HB_BayerGB8, PixelType_Gvsp_HB_BayerBG8,
-        PixelType_Gvsp_HB_BayerGR10, PixelType_Gvsp_HB_BayerRG10,
-        PixelType_Gvsp_HB_BayerGB10, PixelType_Gvsp_HB_BayerBG10,
-        PixelType_Gvsp_HB_BayerGR12, PixelType_Gvsp_HB_BayerRG12,
-        PixelType_Gvsp_HB_BayerGB12, PixelType_Gvsp_HB_BayerBG12,
-        PixelType_Gvsp_HB_BayerGR10_Packed, PixelType_Gvsp_HB_BayerRG10_Packed,
-        PixelType_Gvsp_HB_BayerGB10_Packed, PixelType_Gvsp_HB_BayerBG10_Packed,
-        PixelType_Gvsp_HB_BayerGR12_Packed, PixelType_Gvsp_HB_BayerRG12_Packed,
-        PixelType_Gvsp_HB_BayerGB12_Packed, PixelType_Gvsp_HB_BayerBG12_Packed,
-        PixelType_Gvsp_HB_BayerRBGG8, PixelType_Gvsp_HB_BayerBRGG8,
-        PixelType_Gvsp_HB_YUV422_Packed, PixelType_Gvsp_HB_YUV422_YUYV_Packed,
-        PixelType_Gvsp_HB_RGB8_Packed, PixelType_Gvsp_HB_BGR8_Packed,
-    )
-    SDK_AVAILABLE = True
-except ImportError as e:
-    MvCamera = None
-    SDK_AVAILABLE = False
-    log_info(f"相机 SDK 未加载，相机功能不可用: {e}")
+    from core.log_manager import log_info, log_error, log_warning, log_debug
+except ImportError:
+    import logging
+    _logger = logging.getLogger("CameraManager")
+    def log_info(msg):    _logger.info(msg)
+    def log_error(msg):   _logger.error(msg)
+    def log_warning(msg): _logger.warning(msg)
+    def log_debug(msg):   _logger.debug(msg)
 
 
 # ============================================================
-#  工具函数
+# 导入 Daheng gxipy 库
+# ============================================================
+try:
+    import gxipy as gx
+    from gxipy.gxidef import GxDeviceClassList, GxPixelFormatEntry, GxSwitchEntry
+    from gxipy.gxidef import GxTriggerSourceEntry, GxAutoEntry, GxAcquisitionModeEntry
+    from gxipy.gxidef import GxDSStreamBufferHandlingModeEntry
+    DAHENG_AVAILABLE = True
+except ImportError:
+    DAHENG_AVAILABLE = False
+    log_error("无法导入 gxipy 库，请确认 Daheng GalaxySDK Python 包已正确安装")
+
+
+# ============================================================
+# 像素格式常量（兼容旧版调用方使用的枚举值）
+# ============================================================
+# 这些值用于 pixel_type 参数传递，调用方（main_window.py）通过
+# 这些值来判断像素格式。我们映射为 Daheng 的 GxPixelFormatEntry 值。
+class PixelType:
+    """像素类型枚举（兼容旧版接口）"""
+    Mono8  = 0x01080001
+    Mono10 = 0x01100003
+    Mono12 = 0x01100005
+    BayerRG8  = 0x01080009
+    BayerRG10 = 0x0110000B
+    BayerRG12 = 0x0110000D
+    BayerGB8  = 0x01080010
+    BayerGB10 = 0x01100012
+    BayerGB12 = 0x01100014
+    RGB8      = 0x02180014
+
+
+# ============================================================
+# 固定 Bayer 模式配置
+# ============================================================
+# 请根据你的相机实际 Bayer 模式修改此值。
+# 可在 Galaxy Viewer 中查看相机的 Pixel Format 设置来确定正确的模式。
+# 常用值：
+#   cv2.COLOR_BAYER_BG2BGR  — Bayer BG（最常见）
+#   cv2.COLOR_BAYER_GB2BGR  — Bayer GB
+#   cv2.COLOR_BAYER_RG2BGR  — Bayer RG
+#   cv2.COLOR_BAYER_GR2BGR  — Bayer GR
+# 注意：OpenCV 的 Bayer 模式命名规则是"第二个像素的颜色"，
+# 例如 BG2BGR 表示 2x2 块中 (0,0)=B, (0,1)=G, (1,0)=G, (1,1)=R
+CAMERA_BAYER_PATTERN = cv2.COLOR_BAYER_GB2BGR
+
+# ============================================================
+# 图像后处理配置（提升画面质量，接近 Galaxy Viewer 效果）
 # ============================================================
 
-def error_code_to_hex(error_num) -> str:
-    """将错误码转为十六进制字符串"""
-    if error_num < 0:
-        return f"-0x{abs(error_num):08X}"
-    return f"0x{error_num:08X}"
+# Gamma 校正值（sRGB 标准 Gamma ≈ 2.2）
+# 值越大，暗部提亮越明显。Galaxy Viewer 默认使用 0.45 的 Gamma 值，
+# 对应 OpenCV 校正时使用 1/0.45 ≈ 2.22
+CAMERA_GAMMA = 2.2
+
+# 锐化强度（0.0 = 不锐化，建议 0.3 ~ 1.0）
+# Galaxy Viewer 默认会应用轻度锐化以提升画面清晰度
+CAMERA_SHARPEN_STRENGTH = 0.5
+
+# 16bit → 8bit 转换方式
+# "shift" : 直接右移 8 位（固定映射，亮度稳定，推荐）
+# "norm"  : NORM_MINMAX 动态拉伸（每帧自适应，亮度可能跳动）
+CAMERA_16BIT_CONVERSION = "shift"
 
 
-def decode_char(ctypes_char_array) -> str:
-    """安全地从 ctypes 字符数组中解码出字符串"""
-    byte_str = memoryview(ctypes_char_array).tobytes()
-    null_idx = byte_str.find(b'\x00')
-    if null_idx != -1:
-        byte_str = byte_str[:null_idx]
-    for encoding in ['gbk', 'utf-8', 'latin-1']:
-        try:
-            return byte_str.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return byte_str.decode('latin-1', errors='replace')
+# ============================================================
+# 像素格式工具函数（兼容旧版接口）
+# ============================================================
+
+def _ensure_int_pixel_type(pixel_type) -> int:
+    """确保 pixel_type 是 Python int 类型（处理 c_int 等情况）"""
+    if isinstance(pixel_type, int):
+        return pixel_type
+    try:
+        return int(pixel_type)
+    except (TypeError, ValueError):
+        return 0
 
 
 def is_mono_data(pixel_type: int) -> bool:
-    """判断是否为 Mono 图像"""
-    mono_types = [
-        PixelType_Gvsp_Mono8, PixelType_Gvsp_Mono10,
-        PixelType_Gvsp_Mono10_Packed, PixelType_Gvsp_Mono12,
-        PixelType_Gvsp_Mono12_Packed
-    ]
-    return pixel_type in mono_types
+    """判断是否为黑白（Mono）像素格式"""
+    pt = _ensure_int_pixel_type(pixel_type)
+    mono_codes = {
+        0x01080001,  # Mono8
+        0x01100003,  # Mono10
+        0x01100005,  # Mono12
+        0x01100007,  # Mono16
+    }
+    return pt in mono_codes
 
 
 def is_color_data(pixel_type: int) -> bool:
-    """判断是否为彩色/Bayer 图像（包含标准格式和 HB_ 系列）"""
-    color_types = [
-        # 标准 Bayer
-        PixelType_Gvsp_BayerGR8, PixelType_Gvsp_BayerRG8,
-        PixelType_Gvsp_BayerGB8, PixelType_Gvsp_BayerBG8,
-        PixelType_Gvsp_BayerGR10, PixelType_Gvsp_BayerRG10,
-        PixelType_Gvsp_BayerGB10, PixelType_Gvsp_BayerBG10,
-        PixelType_Gvsp_BayerGR12, PixelType_Gvsp_BayerRG12,
-        PixelType_Gvsp_BayerGB12, PixelType_Gvsp_BayerBG12,
-        PixelType_Gvsp_BayerGR10_Packed, PixelType_Gvsp_BayerRG10_Packed,
-        PixelType_Gvsp_BayerGB10_Packed, PixelType_Gvsp_BayerBG10_Packed,
-        PixelType_Gvsp_BayerGR12_Packed, PixelType_Gvsp_BayerRG12_Packed,
-        PixelType_Gvsp_BayerGB12_Packed, PixelType_Gvsp_BayerBG12_Packed,
-        PixelType_Gvsp_BayerRBGG8, PixelType_Gvsp_BayerBRGG8,
-        PixelType_Gvsp_BayerGR16, PixelType_Gvsp_BayerRG16,
-        PixelType_Gvsp_BayerGB16, PixelType_Gvsp_BayerBG16,
-        # 标准 YUV
-        PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed,
-        PixelType_Gvsp_YUV411_Packed, PixelType_Gvsp_YUV444_Packed,
-        # 标准 RGB/BGR Packed
-        PixelType_Gvsp_RGB8_Packed, PixelType_Gvsp_BGR8_Packed,
-        # HB 系列 Bayer
-        PixelType_Gvsp_HB_BayerGR8, PixelType_Gvsp_HB_BayerRG8,
-        PixelType_Gvsp_HB_BayerGB8, PixelType_Gvsp_HB_BayerBG8,
-        PixelType_Gvsp_HB_BayerGR10, PixelType_Gvsp_HB_BayerRG10,
-        PixelType_Gvsp_HB_BayerGB10, PixelType_Gvsp_HB_BayerBG10,
-        PixelType_Gvsp_HB_BayerGR12, PixelType_Gvsp_HB_BayerRG12,
-        PixelType_Gvsp_HB_BayerGB12, PixelType_Gvsp_HB_BayerBG12,
-        PixelType_Gvsp_HB_BayerGR10_Packed, PixelType_Gvsp_HB_BayerRG10_Packed,
-        PixelType_Gvsp_HB_BayerGB10_Packed, PixelType_Gvsp_HB_BayerBG10_Packed,
-        PixelType_Gvsp_HB_BayerGR12_Packed, PixelType_Gvsp_HB_BayerRG12_Packed,
-        PixelType_Gvsp_HB_BayerGB12_Packed, PixelType_Gvsp_HB_BayerBG12_Packed,
-        PixelType_Gvsp_HB_BayerRBGG8, PixelType_Gvsp_HB_BayerBRGG8,
-        # HB 系列 YUV
-        PixelType_Gvsp_HB_YUV422_Packed, PixelType_Gvsp_HB_YUV422_YUYV_Packed,
-        # HB 系列 RGB/BGR Packed
-        PixelType_Gvsp_HB_RGB8_Packed, PixelType_Gvsp_HB_BGR8_Packed,
-    ]
-    return pixel_type in color_types
-
-
-# 像素格式名称映射表（用于调试日志）
-_PIXEL_TYPE_NAMES = {
-    PixelType_Gvsp_Mono8: "Mono8",
-    PixelType_Gvsp_Mono10: "Mono10",
-    PixelType_Gvsp_Mono10_Packed: "Mono10_Packed",
-    PixelType_Gvsp_Mono12: "Mono12",
-    PixelType_Gvsp_Mono12_Packed: "Mono12_Packed",
-    PixelType_Gvsp_Mono14: "Mono14",
-    PixelType_Gvsp_Mono16: "Mono16",
-    PixelType_Gvsp_BayerGR8: "BayerGR8",
-    PixelType_Gvsp_BayerRG8: "BayerRG8",
-    PixelType_Gvsp_BayerGB8: "BayerGB8",
-    PixelType_Gvsp_BayerBG8: "BayerBG8",
-    PixelType_Gvsp_BayerGR10: "BayerGR10",
-    PixelType_Gvsp_BayerRG10: "BayerRG10",
-    PixelType_Gvsp_BayerGB10: "BayerGB10",
-    PixelType_Gvsp_BayerBG10: "BayerBG10",
-    PixelType_Gvsp_BayerGR12: "BayerGR12",
-    PixelType_Gvsp_BayerRG12: "BayerRG12",
-    PixelType_Gvsp_BayerGB12: "BayerGB12",
-    PixelType_Gvsp_BayerBG12: "BayerBG12",
-    PixelType_Gvsp_BayerGR10_Packed: "BayerGR10_Packed",
-    PixelType_Gvsp_BayerRG10_Packed: "BayerRG10_Packed",
-    PixelType_Gvsp_BayerGB10_Packed: "BayerGB10_Packed",
-    PixelType_Gvsp_BayerBG10_Packed: "BayerBG10_Packed",
-    PixelType_Gvsp_BayerGR12_Packed: "BayerGR12_Packed",
-    PixelType_Gvsp_BayerRG12_Packed: "BayerRG12_Packed",
-    PixelType_Gvsp_BayerGB12_Packed: "BayerGB12_Packed",
-    PixelType_Gvsp_BayerBG12_Packed: "BayerBG12_Packed",
-    PixelType_Gvsp_BayerGR16: "BayerGR16",
-    PixelType_Gvsp_BayerRG16: "BayerRG16",
-    PixelType_Gvsp_BayerGB16: "BayerGB16",
-    PixelType_Gvsp_BayerBG16: "BayerBG16",
-    PixelType_Gvsp_BayerRBGG8: "BayerRBGG8",
-    PixelType_Gvsp_BayerBRGG8: "BayerBRGG8",
-    PixelType_Gvsp_YUV422_Packed: "YUV422_Packed",
-    PixelType_Gvsp_YUV422_YUYV_Packed: "YUV422_YUYV_Packed",
-    PixelType_Gvsp_YUV411_Packed: "YUV411_Packed",
-    PixelType_Gvsp_YUV444_Packed: "YUV444_Packed",
-    PixelType_Gvsp_RGB8_Packed: "RGB8_Packed",
-    PixelType_Gvsp_BGR8_Packed: "BGR8_Packed",
-    # HB 系列
-    PixelType_Gvsp_HB_Mono8: "HB_Mono8",
-    PixelType_Gvsp_HB_Mono10: "HB_Mono10",
-    PixelType_Gvsp_HB_Mono10_Packed: "HB_Mono10_Packed",
-    PixelType_Gvsp_HB_Mono12: "HB_Mono12",
-    PixelType_Gvsp_HB_Mono12_Packed: "HB_Mono12_Packed",
-    PixelType_Gvsp_HB_Mono16: "HB_Mono16",
-    PixelType_Gvsp_HB_BayerGR8: "HB_BayerGR8",
-    PixelType_Gvsp_HB_BayerRG8: "HB_BayerRG8",
-    PixelType_Gvsp_HB_BayerGB8: "HB_BayerGB8",
-    PixelType_Gvsp_HB_BayerBG8: "HB_BayerBG8",
-    PixelType_Gvsp_HB_BayerGR10: "HB_BayerGR10",
-    PixelType_Gvsp_HB_BayerRG10: "HB_BayerRG10",
-    PixelType_Gvsp_HB_BayerGB10: "HB_BayerGB10",
-    PixelType_Gvsp_HB_BayerBG10: "HB_BayerBG10",
-    PixelType_Gvsp_HB_BayerGR12: "HB_BayerGR12",
-    PixelType_Gvsp_HB_BayerRG12: "HB_BayerRG12",
-    PixelType_Gvsp_HB_BayerGB12: "HB_BayerGB12",
-    PixelType_Gvsp_HB_BayerBG12: "HB_BayerBG12",
-    PixelType_Gvsp_HB_BayerGR10_Packed: "HB_BayerGR10_Packed",
-    PixelType_Gvsp_HB_BayerRG10_Packed: "HB_BayerRG10_Packed",
-    PixelType_Gvsp_HB_BayerGB10_Packed: "HB_BayerGB10_Packed",
-    PixelType_Gvsp_HB_BayerBG10_Packed: "HB_BayerBG10_Packed",
-    PixelType_Gvsp_HB_BayerGR12_Packed: "HB_BayerGR12_Packed",
-    PixelType_Gvsp_HB_BayerRG12_Packed: "HB_BayerRG12_Packed",
-    PixelType_Gvsp_HB_BayerGB12_Packed: "HB_BayerGB12_Packed",
-    PixelType_Gvsp_HB_BayerBG12_Packed: "HB_BayerBG12_Packed",
-    PixelType_Gvsp_HB_BayerRBGG8: "HB_BayerRBGG8",
-    PixelType_Gvsp_HB_BayerBRGG8: "HB_BayerBRGG8",
-    PixelType_Gvsp_HB_YUV422_Packed: "HB_YUV422_Packed",
-    PixelType_Gvsp_HB_YUV422_YUYV_Packed: "HB_YUV422_YUYV_Packed",
-    PixelType_Gvsp_HB_RGB8_Packed: "HB_RGB8_Packed",
-    PixelType_Gvsp_HB_BGR8_Packed: "HB_BGR8_Packed",
-}
-
-
-def _get_pixel_type_name(pixel_type: int) -> str:
-    """获取像素格式的可读名称（用于调试日志）"""
-    return _PIXEL_TYPE_NAMES.get(pixel_type, f"未知(0x{pixel_type:08X})")
+    """判断是否为彩色（Bayer/RGB）像素格式"""
+    pt = _ensure_int_pixel_type(pixel_type)
+    # 所有 Bayer 格式（8bit/10bit/12bit/16bit）和 RGB 格式
+    bayer_formats = {
+        0x01080008, 0x01080009, 0x0108000A, 0x0108000B,  # Bayer8  GR/RG/GB/BG
+        0x0110000C, 0x0110000D, 0x0110000E, 0x0110000F,  # Bayer10 GR/RG/GB/BG
+        0x01100010, 0x01100011, 0x01100012, 0x01100013,  # Bayer12 GR/RG/GB/BG
+        0x0110002E, 0x0110002F, 0x01100030, 0x01100031,  # Bayer16 GR/RG/GB/BG
+    }
+    rgb8_code = 0x02180014  # RGB8
+    return pt in bayer_formats or pt == rgb8_code
 
 
 def pixel_type_to_opencv(pixel_type: int) -> Tuple[Optional[int], bool]:
     """
-    将海康像素格式映射到 OpenCV 转换标志。
-
-    支持标准 PixelType_Gvsp_* 和海康私有 HB_* 系列格式。
-
+    将 Daheng 像素格式映射为 OpenCV 类型。
+    
     Returns:
-        (cv2_color_conversion_flag_or_None, is_color)
+        (cv2_type, is_color)
+        cv2_type: OpenCV 枚举值（如 cv2.CV_8UC1），None 表示未知
+        is_color: 是否为彩色格式
     """
-    # ========== 标准 PixelType_Gvsp_* 系列 ==========
+    pt = _ensure_int_pixel_type(pixel_type)
+    
+    # Mono 格式
+    if pt in (0x01080001,):  # Mono8
+        return cv2.CV_8UC1, False
+    if pt in (0x01100003, 0x01100005, 0x01100007):  # Mono10, Mono12, Mono16
+        return cv2.CV_16UC1, False
+    
+    # Bayer 8bit 格式 — 数据是 8bit，直接 demosaic
+    if pt in (0x01080008, 0x01080009, 0x0108000A, 0x0108000B):
+        return cv2.CV_8UC1, True
+    
+    # Bayer 10/12/16bit 格式 — 数据是 16bit，需先缩放到 8bit 再 demosaic
+    if pt in (0x0110000C, 0x0110000D, 0x0110000E, 0x0110000F,   # Bayer10 GR/RG/GB/BG
+              0x01100010, 0x01100011, 0x01100012, 0x01100013,   # Bayer12 GR/RG/GB/BG
+              0x0110002E, 0x0110002F, 0x01100030, 0x01100031):  # Bayer16 GR/RG/GB/BG
+        return cv2.CV_16UC1, True
+    
+    # RGB8
+    if pt == 0x02180014:
+        return cv2.CV_8UC3, True
+    
+    log_warning(f"未知的像素格式: 0x{pt:08X}")
+    return None, False
 
-    # --- Mono ---
-    mono_types = [
-        PixelType_Gvsp_Mono8, PixelType_Gvsp_Mono8_Signed,
-        PixelType_Gvsp_Mono10, PixelType_Gvsp_Mono10_Packed,
-        PixelType_Gvsp_Mono12, PixelType_Gvsp_Mono12_Packed,
-        PixelType_Gvsp_Mono14, PixelType_Gvsp_Mono16,
-    ]
-    if pixel_type in mono_types:
-        return (None, False)
 
-    # --- Bayer 8bit ---
-    # 注意：Bayer 排列的映射需要根据相机实际输出调整。
-    # 如果橙色物体显示为蓝色，说明红蓝通道互换，需要换一种排列。
-    # 相机输出 BayerGR8(0x01080008) 但橙色变蓝 → 改用 BayerGB2BGR
-    bayer_8bit_map = {
-        PixelType_Gvsp_BayerGR8: cv2.COLOR_BayerGB2BGR,  # 原为 GR2BGR，橙色变蓝故改为 GB2BGR
-        PixelType_Gvsp_BayerRG8: cv2.COLOR_BayerRG2BGR,
-        PixelType_Gvsp_BayerGB8: cv2.COLOR_BayerGB2BGR,
-        PixelType_Gvsp_BayerBG8: cv2.COLOR_BayerBG2BGR,
-    }
-    if pixel_type in bayer_8bit_map:
-        return (bayer_8bit_map[pixel_type], True)
+def _convert_16bit_to_8bit(img_16u: np.ndarray) -> np.ndarray:
+    """
+    将 16bit 图像转换为 8bit 图像。
+    
+    使用固定位右移方式（>> 8），避免 NORM_MINMAX 动态拉伸导致的
+    亮度跳动问题。这种方式与 Galaxy Viewer 的默认行为更接近。
+    
+    Args:
+        img_16u: 16bit numpy 数组 (np.uint16)
+    
+    Returns:
+        8bit numpy 数组 (np.uint8)
+    """
+    if CAMERA_16BIT_CONVERSION == "norm":
+        # 动态拉伸（保留全部动态范围，但亮度可能跳动）
+        return cv2.normalize(img_16u, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    else:
+        # 固定右移 8 位（默认，亮度稳定，与 Galaxy Viewer 行为一致）
+        return (img_16u >> 8).astype(np.uint8)
 
-    # --- Bayer 10/12bit ---
-    bayer_gr_10_12 = [
-        PixelType_Gvsp_BayerGR10, PixelType_Gvsp_BayerGR10_Packed,
-        PixelType_Gvsp_BayerGR12, PixelType_Gvsp_BayerGR12_Packed,
-        PixelType_Gvsp_BayerGR16,
-    ]
-    bayer_rg_10_12 = [
-        PixelType_Gvsp_BayerRG10, PixelType_Gvsp_BayerRG10_Packed,
-        PixelType_Gvsp_BayerRG12, PixelType_Gvsp_BayerRG12_Packed,
-        PixelType_Gvsp_BayerRG16,
-    ]
-    bayer_gb_10_12 = [
-        PixelType_Gvsp_BayerGB10, PixelType_Gvsp_BayerGB10_Packed,
-        PixelType_Gvsp_BayerGB12, PixelType_Gvsp_BayerGB12_Packed,
-        PixelType_Gvsp_BayerGB16,
-    ]
-    bayer_bg_10_12 = [
-        PixelType_Gvsp_BayerBG10, PixelType_Gvsp_BayerBG10_Packed,
-        PixelType_Gvsp_BayerBG12, PixelType_Gvsp_BayerBG12_Packed,
-        PixelType_Gvsp_BayerBG16,
-    ]
 
-    if pixel_type in bayer_gr_10_12:
-        return (cv2.COLOR_BayerGR2BGR, True)
-    elif pixel_type in bayer_rg_10_12:
-        return (cv2.COLOR_BayerRG2BGR, True)
-    elif pixel_type in bayer_gb_10_12:
-        return (cv2.COLOR_BayerGB2BGR, True)
-    elif pixel_type in bayer_bg_10_12:
-        return (cv2.COLOR_BayerBG2BGR, True)
+def _apply_gamma(img_bgr: np.ndarray, gamma: float = CAMERA_GAMMA) -> np.ndarray:
+    """
+    应用 Gamma 校正，提亮暗部区域，增强对比度。
+    
+    Galaxy Viewer 默认应用 Gamma=0.45 校正，对应 OpenCV 实现中
+    使用 1/0.45 ≈ 2.22 的 Gamma 值进行逆校正。
+    
+    Args:
+        img_bgr: BGR 格式的 8bit 图像
+        gamma: Gamma 值（默认 2.2，对应 sRGB 标准）
+    
+    Returns:
+        Gamma 校正后的 BGR 图像
+    """
+    if gamma <= 0 or gamma == 1.0:
+        return img_bgr
+    # 归一化到 [0, 1] → 应用 Gamma → 还原到 [0, 255]
+    look_up_table = np.empty((1, 256), np.uint8)
+    for i in range(256):
+        look_up_table[0, i] = np.clip(pow(i / 255.0, 1.0 / gamma) * 255.0, 0, 255)
+    return cv2.LUT(img_bgr, look_up_table)
 
-    # --- 特殊 Bayer ---
-    if pixel_type in (PixelType_Gvsp_BayerRBGG8, PixelType_Gvsp_BayerBRGG8):
-        return (cv2.COLOR_BayerBG2BGR, True)  # 近似处理
 
-    # --- YUV ---
-    if pixel_type in (PixelType_Gvsp_YUV422_Packed, PixelType_Gvsp_YUV422_YUYV_Packed):
-        return (cv2.COLOR_YUV2BGR_YUYV, True)
-    if pixel_type == PixelType_Gvsp_YUV411_Packed:
-        return (cv2.COLOR_YUV2BGR_Y411, True)
-    if pixel_type == PixelType_Gvsp_YUV444_Packed:
-        return (cv2.COLOR_YUV2BGR_Y444, True)
-
-    # ========== 海康私有 HB_* 系列 ==========
-    # HB_ 系列与标准系列命名规则相同，映射关系一致
-
-    # --- HB Mono ---
-    hb_mono_types = [
-        PixelType_Gvsp_HB_Mono8, PixelType_Gvsp_HB_Mono10,
-        PixelType_Gvsp_HB_Mono10_Packed, PixelType_Gvsp_HB_Mono12,
-        PixelType_Gvsp_HB_Mono12_Packed, PixelType_Gvsp_HB_Mono16,
-    ]
-    if pixel_type in hb_mono_types:
-        return (None, False)
-
-    # --- HB Bayer 8bit ---
-    hb_bayer_8bit_map = {
-        PixelType_Gvsp_HB_BayerGR8: cv2.COLOR_BayerGR2BGR,
-        PixelType_Gvsp_HB_BayerRG8: cv2.COLOR_BayerRG2BGR,
-        PixelType_Gvsp_HB_BayerGB8: cv2.COLOR_BayerGB2BGR,
-        PixelType_Gvsp_HB_BayerBG8: cv2.COLOR_BayerBG2BGR,
-    }
-    if pixel_type in hb_bayer_8bit_map:
-        return (hb_bayer_8bit_map[pixel_type], True)
-
-    # --- HB Bayer 10/12bit ---
-    hb_bayer_gr = [
-        PixelType_Gvsp_HB_BayerGR10, PixelType_Gvsp_HB_BayerGR10_Packed,
-        PixelType_Gvsp_HB_BayerGR12, PixelType_Gvsp_HB_BayerGR12_Packed,
-    ]
-    hb_bayer_rg = [
-        PixelType_Gvsp_HB_BayerRG10, PixelType_Gvsp_HB_BayerRG10_Packed,
-        PixelType_Gvsp_HB_BayerRG12, PixelType_Gvsp_HB_BayerRG12_Packed,
-    ]
-    hb_bayer_gb = [
-        PixelType_Gvsp_HB_BayerGB10, PixelType_Gvsp_HB_BayerGB10_Packed,
-        PixelType_Gvsp_HB_BayerGB12, PixelType_Gvsp_HB_BayerGB12_Packed,
-    ]
-    hb_bayer_bg = [
-        PixelType_Gvsp_HB_BayerBG10, PixelType_Gvsp_HB_BayerBG10_Packed,
-        PixelType_Gvsp_HB_BayerBG12, PixelType_Gvsp_HB_BayerBG12_Packed,
-    ]
-
-    if pixel_type in hb_bayer_gr:
-        return (cv2.COLOR_BayerGR2BGR, True)
-    elif pixel_type in hb_bayer_rg:
-        return (cv2.COLOR_BayerRG2BGR, True)
-    elif pixel_type in hb_bayer_gb:
-        return (cv2.COLOR_BayerGB2BGR, True)
-    elif pixel_type in hb_bayer_bg:
-        return (cv2.COLOR_BayerBG2BGR, True)
-
-    # --- HB 特殊 Bayer ---
-    if pixel_type in (PixelType_Gvsp_HB_BayerRBGG8, PixelType_Gvsp_HB_BayerBRGG8):
-        return (cv2.COLOR_BayerBG2BGR, True)
-
-    # --- HB YUV ---
-    if pixel_type in (PixelType_Gvsp_HB_YUV422_Packed, PixelType_Gvsp_HB_YUV422_YUYV_Packed):
-        return (cv2.COLOR_YUV2BGR_YUYV, True)
-
-    # --- HB RGB/BGR Packed ---
-    if pixel_type == PixelType_Gvsp_HB_RGB8_Packed:
-        return (cv2.COLOR_RGB2BGR, True)
-    if pixel_type == PixelType_Gvsp_HB_BGR8_Packed:
-        return (None, True)  # 已经是 BGR，无需转换
-
-    # --- 标准 RGB/BGR Packed ---
-    if pixel_type == PixelType_Gvsp_RGB8_Packed:
-        return (cv2.COLOR_RGB2BGR, True)
-    if pixel_type == PixelType_Gvsp_BGR8_Packed:
-        return (None, True)
-
-    # 未知格式
-    return (None, False)
+def _apply_sharpen(img_bgr: np.ndarray, strength: float = CAMERA_SHARPEN_STRENGTH) -> np.ndarray:
+    """
+    应用轻度锐化，提升画面清晰度。
+    
+    使用 Unsharp Mask 方式：原图 + strength * (原图 - 高斯模糊)
+    
+    Args:
+        img_bgr: BGR 格式的 8bit 图像
+        strength: 锐化强度（0.0 = 不锐化，建议 0.3 ~ 1.0）
+    
+    Returns:
+        锐化后的 BGR 图像
+    """
+    if strength <= 0:
+        return img_bgr
+    # 高斯模糊（核大小 3x3，sigma=1.0）
+    blurred = cv2.GaussianBlur(img_bgr, (0, 0), 1.0)
+    # 原图 + strength * (原图 - 模糊)
+    sharpened = cv2.addWeighted(img_bgr, 1.0 + strength, blurred, -strength, 0)
+    return sharpened
 
 
 def raw_to_opencv(frame_data: bytes, width: int, height: int,
                   pixel_type: int) -> Optional[np.ndarray]:
     """
-    将 SDK 原始帧数据转换为 OpenCV BGR 图像。
-
+    将相机原始帧数据转换为 OpenCV BGR 图像。
+    
+    处理流程：
+        1. 原始数据 → numpy 数组
+        2. Bayer demosaic（彩色 Bayer 格式）
+        3. 16bit → 8bit 转换（固定右移，避免亮度跳动）
+        4. Gamma 校正（提亮暗部，增强对比度）
+        5. 轻度锐化（提升清晰度）
+    
+    这是兼容旧版接口的全局函数，main_window.py 中直接调用。
+    
     Args:
         frame_data: 原始帧字节数据
-        width: 图像宽度
+        width:  图像宽度
         height: 图像高度
-        pixel_type: 海康像素格式枚举值
-
+        pixel_type: 像素格式枚举值
+    
     Returns:
-        BGR 格式的 numpy 数组，失败返回 None
+        BGR 格式的 np.ndarray，失败返回 None
     """
     try:
-        img_data = np.frombuffer(frame_data, dtype=np.uint8)
-
-        # ---------- Mono8 直接返回 ----------
-        if pixel_type == PixelType_Gvsp_Mono8:
-            return img_data.reshape((height, width)).copy()
-
-        # ---------- 彩色/Bayer 格式 ----------
-        elif is_color_data(pixel_type):
-            bayer_img = img_data.reshape((height, width)).copy()
-            cv_color, _ = pixel_type_to_opencv(pixel_type)
-            if cv_color is not None:
-                return cv2.cvtColor(bayer_img, cv_color)
-            # 回退：尝试所有 4 种 Bayer 排列，取颜色最丰富的那个
-            # （避免硬编码 BayerBG2BGR 导致红蓝通道互换）
-            log_warning(f"未知 Bayer 格式 pixel_type={pixel_type}，尝试自动检测排列")
-            return _auto_detect_bayer(bayer_img)
-
-        # ---------- YUV 格式 ----------
-        elif pixel_type in (PixelType_Gvsp_YUV422_Packed,
-                            PixelType_Gvsp_YUV422_YUYV_Packed):
-            yuv_img = img_data.reshape((height, width, 2)).copy()
-            return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_YUYV)
-
-        # ---------- 其他（尝试按 3 通道或单通道解析） ----------
+        if not frame_data or width <= 0 or height <= 0:
+            return None
+        
+        cv_type, is_color = pixel_type_to_opencv(pixel_type)
+        if cv_type is None:
+            return None
+        
+        # 计算期望数据长度
+        if cv_type == cv2.CV_8UC1:
+            expected_len = width * height
+            dtype = np.uint8
+            channels = 1
+        elif cv_type == cv2.CV_16UC1:
+            expected_len = width * height * 2
+            dtype = np.uint16
+            channels = 1
+        elif cv_type == cv2.CV_8UC3:
+            expected_len = width * height * 3
+            dtype = np.uint8
+            channels = 3
         else:
-            try:
-                return img_data.reshape((height, width, 3)).copy()
-            except Exception:
-                return img_data.reshape((height, width)).copy()
-
+            return None
+        
+        # 数据长度检查
+        actual_len = len(frame_data)
+        if actual_len < expected_len:
+            log_warning(f"帧数据长度不足: 期望 {expected_len}, 实际 {actual_len}")
+            # 尝试用已有数据填充
+            pad_len = expected_len - actual_len
+            frame_data = frame_data + b'\x00' * pad_len
+        elif actual_len > expected_len:
+            frame_data = frame_data[:expected_len]
+        
+        # 创建 numpy 数组
+        img = np.frombuffer(frame_data, dtype=dtype).reshape(height, width)
+        
+        if is_color and channels == 1:
+            # Bayer 格式 — 使用固定 Bayer 模式 demosaic（避免自动检测在暗画面下闪烁）
+            if dtype == np.uint16:
+                # 16bit Bayer → 缩放到 8bit → demosaic
+                img_8u = _convert_16bit_to_8bit(img)
+                img_bgr = cv2.cvtColor(img_8u, CAMERA_BAYER_PATTERN)
+            else:
+                # 8bit Bayer → 直接 demosaic
+                img_bgr = cv2.cvtColor(img, CAMERA_BAYER_PATTERN)
+            
+            # 后处理：Gamma 校正 + 锐化（使画面接近 Galaxy Viewer 效果）
+            img_bgr = _apply_gamma(img_bgr, CAMERA_GAMMA)
+            img_bgr = _apply_sharpen(img_bgr, CAMERA_SHARPEN_STRENGTH)
+            return img_bgr
+        
+        elif is_color and channels == 3:
+            # 已经是 RGB8 — 转换为 BGR
+            img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            # 后处理：Gamma 校正 + 锐化
+            img_bgr = _apply_gamma(img_bgr, CAMERA_GAMMA)
+            img_bgr = _apply_sharpen(img_bgr, CAMERA_SHARPEN_STRENGTH)
+            return img_bgr
+        
+        else:
+            # Mono 格式 — 堆叠为 3 通道灰度
+            if img.dtype == np.uint16:
+                # 16bit → 8bit 固定右移
+                img_8u = _convert_16bit_to_8bit(img)
+            else:
+                img_8u = img
+            img_bgr = cv2.merge([img_8u, img_8u, img_8u])
+            # 后处理：Gamma 校正 + 锐化
+            img_bgr = _apply_gamma(img_bgr, CAMERA_GAMMA)
+            img_bgr = _apply_sharpen(img_bgr, CAMERA_SHARPEN_STRENGTH)
+            return img_bgr
+    
     except Exception as e:
-        log_error(f"图像格式转换失败: {e}")
+        log_error(f"raw_to_opencv 转换失败: {e}")
         return None
 
 
-def _auto_detect_bayer(bayer_img: np.ndarray) -> np.ndarray:
+def _auto_detect_bayer(bayer_img: np.ndarray) -> int:
     """
-    自动检测 Bayer 排列方式。
-    尝试 4 种排列，选择颜色方差最大的结果（即颜色最丰富的）。
-    这通常能正确还原彩色图像，避免红蓝通道互换。
-
-    Args:
-        bayer_img: 单通道 Bayer RAW 图像 (H, W)
-
+    自动检测 Bayer 排列模式。
+    通过分析图像 2x2 块的颜色分量来推断 Bayer 模式。
+    
     Returns:
-        BGR 格式的 numpy 数组
+        OpenCV Bayer 转换常量（如 cv2.COLOR_BAYER_BG2BGR）
     """
-    bayer_modes = [
-        ("BayerBG2BGR", cv2.COLOR_BayerBG2BGR),
-        ("BayerGB2BGR", cv2.COLOR_BayerGB2BGR),
-        ("BayerRG2BGR", cv2.COLOR_BayerRG2BGR),
-        ("BayerGR2BGR", cv2.COLOR_BayerGR2BGR),
-    ]
-
-    best_result = None
-    best_score = -1.0
-    best_name = "BayerBG2BGR"
-
-    for name, code in bayer_modes:
-        try:
-            bgr = cv2.cvtColor(bayer_img, code)
-            # 计算颜色方差：三个通道的方差之和越大，颜色越丰富
-            score = (np.var(bgr[:, :, 0]) + np.var(bgr[:, :, 1]) +
-                     np.var(bgr[:, :, 2]))
-            if score > best_score:
-                best_score = score
-                best_result = bgr
-                best_name = name
-        except Exception:
-            continue
-
-    if best_result is not None:
-        log_info(f"自动检测 Bayer 排列: {best_name} (score={best_score:.1f})")
-        return best_result
-
-    # 所有尝试都失败，回退到 BayerBG2BGR
-    log_error("自动检测 Bayer 排列失败，回退到 BayerBG2BGR")
-    return cv2.cvtColor(bayer_img, cv2.COLOR_BayerBG2BGR)
+    h, w = bayer_img.shape
+    if h < 4 or w < 4:
+        return cv2.COLOR_BAYER_BG2BGR  # 默认
+    
+    # 取中心区域分析
+    cy, cx = h // 2, w // 2
+    # 检查 2x2 块的四角亮度差异
+    block = bayer_img[cy-1:cy+1, cx-1:cx+1].astype(np.float32)
+    
+    # 计算水平和垂直方向的梯度
+    grad_h = np.abs(bayer_img[cy-1:cy+1, cx-2:cx+2].astype(np.float32)).mean()
+    grad_v = np.abs(bayer_img[cy-2:cy+2, cx-1:cx+1].astype(np.float32)).mean()
+    
+    # 通过分析自然图像的 Bayer 模式特征来推断
+    # 大多数 Bayer 相机使用 BG 或 GB 模式
+    # 检查 (0,0) 和 (1,1) 位置的差异
+    diff_diag = abs(float(block[0, 0]) - float(block[1, 1]))
+    diff_anti = abs(float(block[0, 1]) - float(block[1, 0]))
+    
+    if diff_diag < diff_anti:
+        # 对角线相似 → BG 或 GR
+        if grad_h > grad_v:
+            return cv2.COLOR_BAYER_BG2BGR
+        else:
+            return cv2.COLOR_BAYER_GR2BGR
+    else:
+        # 反对角线相似 → GB 或 RG
+        if grad_h > grad_v:
+            return cv2.COLOR_BAYER_GB2BGR
+        else:
+            return cv2.COLOR_BAYER_RG2BGR
 
 
 # ============================================================
-#  取流线程（QThread 版本，用于 UI 集成）
+# 相机取流线程
 # ============================================================
 
 class CameraGrabbingThread(QThread):
     """
-    相机取流线程。
-    在后台循环调用 MV_CC_GetImageBuffer 获取图像，
-    并通过信号将帧数据发送到主线程。
+    实时取流线程。
+    使用 Daheng SDK 的 data_stream[0].get_image() 轮询模式。
     """
-
     frame_received = pyqtSignal(int, int, int, bytes)  # width, height, pixel_type, data
-
-    def __init__(self, camera_obj):
+    
+    def __init__(self, device):
         super().__init__()
-        self._camera = camera_obj
+        self._device = device          # gx.Device 对象
         self._running = False
-
+        self._data_stream = None
+    
     def run(self):
+        """线程主循环"""
         self._running = True
-        st_frame = MV_FRAME_OUT()
-        ctypes.memset(ctypes.byref(st_frame), 0, ctypes.sizeof(MV_FRAME_OUT))
-        _logged_pixel_type = False  # 只打印一次像素格式信息
-
-        while self._running:
+        
+        try:
+            # 获取数据流对象
+            if not self._device or not self._device.data_stream:
+                log_error("取流线程: 设备没有数据流")
+                self._running = False
+                return
+            
+            self._data_stream = self._device.data_stream[0]
+            
+            # 设置采集缓冲区数量（优化性能）
             try:
-                ret = self._camera.MV_CC_GetImageBuffer(st_frame, 200)
-                if ret == MV_OK:
-                    frame_info = st_frame.stFrameInfo
-                    width = frame_info.nWidth
-                    height = frame_info.nHeight
-                    pixel_type = frame_info.enPixelType
-                    frame_len = frame_info.nFrameLen
-
-                    # 首次获取到帧时，打印像素格式信息（方便调试颜色问题）
-                    if not _logged_pixel_type:
-                        _logged_pixel_type = True
-                        pixel_name = _get_pixel_type_name(pixel_type)
-                        log_info(f"相机输出: {width}x{height}, 像素格式={pixel_name} (0x{pixel_type:08X})")
-
-                    if st_frame.pBufAddr and frame_len > 0:
-                        buf = (ctypes.c_ubyte * frame_len).from_address(
-                            ctypes.addressof(st_frame.pBufAddr.contents))
-                        img_bytes = bytes(buf)
-                    else:
-                        img_bytes = b""
-
-                    self._camera.MV_CC_FreeImageBuffer(st_frame)
-
-                    if img_bytes:
-                        self.frame_received.emit(width, height, pixel_type, img_bytes)
-                else:
-                    self.msleep(5)
-
-            except Exception as e:
-                log_error(f"取流线程异常: {e}")
-                self.msleep(50)
-
+                self._data_stream.set_acquisition_buffer_number(8)
+            except Exception:
+                pass
+            
+            # 开始采集
+            self._device.stream_on()
+            log_info("取流线程: 开始采集")
+            
+            while self._running:
+                try:
+                    # 获取图像（超时 1000ms）
+                    raw_image = self._data_stream.get_image(1000)
+                    if raw_image is None:
+                        continue
+                    
+                    # 获取图像信息
+                    width = raw_image.get_width()
+                    height = raw_image.get_height()
+                    pixel_format = raw_image.get_pixel_format()
+                    frame_data = raw_image.get_data()
+                    
+                    if frame_data is None or width == 0 or height == 0:
+                        continue
+                    
+                    # 将 Daheng 像素格式映射为兼容的 pixel_type 值
+                    pixel_type = _daheng_pf_to_compat(pixel_format)
+                    
+                    # 发出信号
+                    self.frame_received.emit(width, height, pixel_type, bytes(frame_data))
+                    
+                except Exception as e:
+                    if self._running:
+                        # 超时是正常情况，不打印错误
+                        err_msg = str(e)
+                        if "timeout" not in err_msg.lower() and "超时" not in err_msg:
+                            log_debug(f"取流线程获取图像异常: {e}")
+        
+        except Exception as e:
+            log_error(f"取流线程异常: {e}")
+            traceback.print_exc()
+        finally:
+            self._cleanup()
+    
+    def _cleanup(self):
+        """清理资源"""
+        try:
+            if self._device:
+                self._device.stream_off()
+        except Exception:
+            pass
+        log_info("取流线程: 已停止")
+    
     def stop(self):
+        """停止取流线程"""
         self._running = False
-        self.wait(2000)
+        self.wait(3000)  # 等待最多 3 秒
+
+
+def _daheng_pf_to_compat(daheng_pf) -> int:
+    """
+    将 Daheng SDK 的像素格式值映射为兼容的 PixelType 枚举值。
+    
+    Daheng 的像素格式定义在 GxPixelFormatEntry 中，
+    与 Hikvision 的 PixelType_header.py 定义一致（均为 GenICam 标准）。
+    
+    注意：daheng_pf 可能是 c_int 类型，需要转为 Python int。
+    """
+    # 确保返回 Python int（处理 c_int 等情况）
+    return int(daheng_pf)
 
 
 # ============================================================
-#  相机管理器（主类）
+# 相机管理器（单例）
 # ============================================================
 
 class CameraManager:
     """
-    海康工业相机管理器。
-
-    封装了相机的枚举、连接、取流、参数调节、触发控制等完整操作。
-    参考官方 Python DEMO 中的 HikCamera 类实现。
-
-    用法:
+    相机管理器 — Daheng GalaxySDK 实现。
+    
+    使用方式（与旧版一致）：
+        CameraManager.initialize_sdk()   # 应用启动时
         mgr = CameraManager()
         devices = mgr.enumerate_devices()
-        if devices:
-            mgr.open_camera(devices[0]["dev_info"])
-            mgr.start_grabbing(callback)
-            ...
-            mgr.close_camera()
+        mgr.open_camera(devices[0])
+        mgr.start_grabbing(callback)
+        ...
+        mgr.close_camera()
+        CameraManager.finalize_sdk()     # 应用退出时
     """
-
-    _MvCamera = MvCamera
+    
     _sdk_initialized = False
-
+    _device_manager = None  # gx.DeviceManager 单例
+    
     def __init__(self):
-        self._camera = None
+        self._device = None          # 当前打开的 gx.Device 对象
+        self._device_info = None     # 当前设备信息 dict
+        self._is_open = False
+        self._is_trigger_mode = False #当前是否为触发模式
         self._grabbing_thread = None
-        self._is_grabbing = False
-        self._lock = threading.Lock()
-        self._device_info = None
-        self._is_trigger_mode = False
-        self._frame_callback = None  # 保存帧回调，用于 capture_once 恢复取流
-
-    # ---------- SDK 初始化 ----------
-
+        self._data_stream = None
+    
+    # ---- 属性 ----
+    
+    @property
+    def is_open(self) -> bool:
+        return self._is_open
+    
+    @property
+    def is_trigger_mode(self) -> bool:
+        """当前是否为触发模式"""
+        return self._is_trigger_mode
+    
+    @property
+    def device(self):
+        return self._device
+    
+    # ---- SDK 生命周期 ----
+    
     @staticmethod
     def initialize_sdk():
-        """初始化相机 SDK（应用启动时调用一次）"""
-        if not SDK_AVAILABLE:
-            log_info("相机 SDK 不可用，跳过初始化")
+        """
+        初始化 Daheng SDK。
+        注意：Daheng SDK 不需要显式初始化，DeviceManager 实例化时自动初始化。
+        此方法仅做标记和检查。
+        """
+        if CameraManager._sdk_initialized:
             return
-
+        
+        if not DAHENG_AVAILABLE:
+            log_error("Daheng gxipy 不可用，请检查安装")
+            return
+        
         try:
-            ret = MvCamera.MV_CC_Initialize()
-            if ret == MV_OK:
-                CameraManager._sdk_initialized = True
-                log_info("相机 SDK 初始化成功")
-            else:
-                log_error(f"相机 SDK 初始化失败: {error_code_to_hex(ret)}")
+            # 实例化 DeviceManager（单例，自动初始化 SDK）
+            if CameraManager._device_manager is None:
+                CameraManager._device_manager = gx.DeviceManager()
+            CameraManager._sdk_initialized = True
+            log_info("Daheng SDK 初始化成功")
         except Exception as e:
-            log_error(f"相机 SDK 初始化异常: {e}")
-
+            log_error(f"Daheng SDK 初始化失败: {e}")
+    
     @staticmethod
     def finalize_sdk():
-        """反初始化相机 SDK（应用退出时调用一次）"""
-        if not SDK_AVAILABLE:
-            return
-        try:
-            MvCamera.MV_CC_Finalize()
-        except Exception:
-            pass
-        CameraManager._sdk_initialized = False
-        log_info("相机 SDK 反初始化完成")
-
-    def _ensure_sdk_initialized(self):
+        """
+        反初始化 Daheng SDK。
+        Daheng SDK 不需要显式反初始化，但为了兼容旧版接口保留此方法。
+        """
         if not CameraManager._sdk_initialized:
-            self.initialize_sdk()
-
-    # ---------- 设备枚举 ----------
-
+            return
+        
+        try:
+            # 清理 DeviceManager 引用
+            CameraManager._device_manager = None
+            CameraManager._sdk_initialized = False
+            log_info("Daheng SDK 已释放")
+        except Exception as e:
+            log_error(f"Daheng SDK 释放异常: {e}")
+    
+    @staticmethod
+    def _ensure_sdk_initialized():
+        """确保 SDK 已初始化"""
+        if not CameraManager._sdk_initialized:
+            CameraManager.initialize_sdk()
+    
+    # ---- 设备枚举 ----
+    
     def enumerate_devices(self, timeout_ms: int = 200) -> List[Dict[str, Any]]:
         """
         枚举所有可用的相机设备。
-
+        
+        默认先尝试同网段快速搜索（update_device_list），
+        如果未找到设备，自动切换为跨网段搜索（update_all_device_list），
+        以解决相机 IP 与电脑网卡 IP 不在同一网段时搜索不到的问题。
+        
         Args:
-            timeout_ms: GigE 设备枚举超时时间（毫秒）
-
+            timeout_ms: 枚举超时（毫秒）
+        
         Returns:
-            list of dict, 每个 dict 包含:
-                - index: 设备索引
-                - name: 设备显示名称
-                - model: 设备型号
-                - serial: 序列号
-                - ip: IP 地址（GigE）
-                - type: 设备类型 (GigE/USB)
-                - tlayer_type: 传输层类型枚举值
-                - dev_info: 深度拷贝的 MV_CC_DEVICE_INFO 结构体
+            设备信息字典列表，每个字典包含:
+                - 'index':       设备索引
+                - 'sn':          序列号
+                - 'name':        设备名称（型号）
+                - 'vendor':      厂商名
+                - 'display_name': 显示名称
+                - 'device_class': 设备类型（GigE/U3V）
+                - 'ip':          IP 地址（GigE 设备）
+                - 'mac':         MAC 地址（GigE 设备）
+                - '_raw_info':   原始设备信息
         """
+        self._ensure_sdk_initialized()
+        
         devices = []
-        if not SDK_AVAILABLE:
-            log_info("相机 SDK 不可用，无法枚举设备")
-            return devices
-
         try:
-            self._ensure_sdk_initialized()
-
-            try:
-                MvCamera.MV_GIGE_SetEnumDevTimeout(timeout_ms)
-            except Exception:
-                pass
-
-            device_list = MV_CC_DEVICE_INFO_LIST()
-            n_layer_type = MV_GIGE_DEVICE | MV_USB_DEVICE
-            ret = MvCamera.MV_CC_EnumDevices(n_layer_type, device_list)
-
-            if ret == MV_OK and device_list.nDeviceNum > 0:
-                for i in range(device_list.nDeviceNum):
-                    dev_info = ctypes.cast(
-                        device_list.pDeviceInfo[i],
-                        ctypes.POINTER(MV_CC_DEVICE_INFO)
-                    ).contents
-                    dev_info_copy = self._deep_copy_device_info(dev_info)
-                    info = self._parse_device_info(dev_info_copy, i)
-                    if info:
-                        devices.append(info)
-
-            log_info(f"枚举到 {len(devices)} 个相机设备")
-
-        except Exception as e:
-            log_error(f"枚举相机失败: {e}")
-
-        return devices
-
-    def _deep_copy_device_info(self, src) -> MV_CC_DEVICE_INFO:
-        dst = MV_CC_DEVICE_INFO()
-        ctypes.memmove(ctypes.byref(dst), ctypes.byref(src),
-                       ctypes.sizeof(MV_CC_DEVICE_INFO))
-        return dst
-
-    def _parse_device_info(self, dev_info, index: int) -> Optional[Dict[str, Any]]:
-        try:
-            n_layer = dev_info.nTLayerType
-            result = {
-                "index": index,
-                "tlayer_type": n_layer,
-                "dev_info": dev_info,
-            }
-
-            if n_layer == MV_GIGE_DEVICE:
-                gige = dev_info.SpecialInfo.stGigEInfo
-                result["type"] = "GigE"
-                result["name"] = decode_char(gige.chUserDefinedName)
-                result["model"] = decode_char(gige.chModelName)
-                result["serial"] = decode_char(gige.chSerialNumber)
-                ip = gige.nCurrentIp
-                result["ip"] = f"{(ip >> 24) & 0xff}.{(ip >> 16) & 0xff}.{(ip >> 8) & 0xff}.{ip & 0xff}"
-            elif n_layer == MV_USB_DEVICE:
-                usb = dev_info.SpecialInfo.stUsb3VInfo
-                result["type"] = "USB"
-                result["name"] = decode_char(usb.chUserDefinedName)
-                result["model"] = decode_char(usb.chModelName)
-                result["serial"] = decode_char(usb.chSerialNumber)
-                result["ip"] = "N/A"
+            mgr = CameraManager._device_manager
+            if mgr is None:
+                return devices
+            
+            # 第一步：先尝试同网段快速搜索
+            result = mgr.update_device_list(timeout_ms)
+            if isinstance(result, tuple):
+                num, dev_info_list = result
             else:
-                result["type"] = "Unknown"
-                result["name"] = "Unknown"
-                result["model"] = "Unknown"
-                result["serial"] = "Unknown"
-                result["ip"] = "N/A"
-
-            return result
-
+                num = result
+                dev_info_list = mgr.get_device_info()
+            
+            # 第二步：同网段没找到，自动跨网段搜索
+            if num <= 0 or not dev_info_list:
+                log_info("同网段未发现设备，尝试跨网段搜索...")
+                result = mgr.update_all_device_list(timeout_ms)
+                if isinstance(result, tuple):
+                    num, dev_info_list = result
+                else:
+                    num = result
+                    dev_info_list = mgr.get_device_info()
+            
+            if num <= 0:
+                log_info("未发现相机设备")
+                return devices
+            if not dev_info_list:
+                return devices
+            
+            for i, info in enumerate(dev_info_list):
+                try:
+                    device_info = self._parse_device_info(info, i)
+                    if device_info:
+                        devices.append(device_info)
+                except Exception as e:
+                    log_debug(f"解析设备信息失败 (index={i}): {e}")
+                    continue
+            
+            log_info(f"枚举到 {len(devices)} 个相机设备")
+        
         except Exception as e:
-            log_error(f"解析设备信息失败: {e}")
+            log_error(f"枚举设备失败: {e}")
+        
+        return devices
+    
+    def _parse_device_info(self, dev_info, index: int) -> Optional[Dict[str, Any]]:
+        """
+        解析 Daheng 设备信息为统一字典格式。
+        
+        dev_info 是 gxipy 返回的设备信息元组:
+            (vendor, model, serial_number, device_class, mac, ip, user_id)
+        """
+        try:
+            if isinstance(dev_info, dict):
+                #新版gxipy返回的是dict(详情请在__get_device_info_list中查看)
+                vendor = str(dev_info.get('vendor_name', ''))
+                model  = str(dev_info.get('model_name', '')) 
+                sn     = str(dev_info.get('sn', ''))
+                dev_class = int(dev_info.get('device_class', 0))
+                mac    = str(dev_info.get('mac', ''))
+                ip     = str(dev_info.get('ip', ''))
+                user_id = str(dev_info.get('user_id', ''))
+            elif isinstance(dev_info, (tuple, list)):
+                #旧版元组格式
+                vendor = str(dev_info[0]) if len(dev_info) > 0 else ""
+                model  = str(dev_info[1]) if len(dev_info) > 1 else ""
+                sn     = str(dev_info[2]) if len(dev_info) > 2 else ""
+                dev_class = int(dev_info[3]) if len(dev_info) > 3 else 0
+                mac    = str(dev_info[4]) if len(dev_info) > 4 else ""
+                ip     = str(dev_info[5]) if len(dev_info) > 5 else ""
+                user_id = str(dev_info[6]) if len(dev_info) > 6 else ""
+            else:
+                # 如果是对象，尝试属性访问
+                vendor = getattr(dev_info, 'vendor', '') or ''
+                model  = getattr(dev_info, 'model', '') or ''
+                sn     = getattr(dev_info, 'serial_number', '') or ''
+                dev_class = getattr(dev_info, 'device_class', 0) or 0
+                mac    = getattr(dev_info, 'mac', '') or ''
+                ip     = getattr(dev_info, 'ip', '') or ''
+                user_id = getattr(dev_info, 'user_id', '') or ''
+            
+            # 构建显示名称
+            if user_id:
+                display_name = f"{user_id} ({model})"
+            else:
+                display_name = f"{model} [{sn[:8]}]" if sn else model
+            
+            # 设备类型
+            if dev_class == GxDeviceClassList.GEV:
+                class_name = "GigE"
+            elif dev_class == GxDeviceClassList.U3V:
+                class_name = "U3V"
+            elif dev_class == GxDeviceClassList.U2:
+                class_name = "U2"
+            else:
+                class_name = f"Unknown({dev_class})"
+            
+            return {
+                'index':        index,
+                'sn':           sn,
+                'name':         model,
+                'vendor':       vendor,
+                'display_name': display_name,
+                'device_class': class_name,
+                'ip':           ip,
+                'mac':          mac,
+                'user_id':      user_id,
+                '_raw_info':    dev_info,
+            }
+        
+        except Exception as e:
+            log_debug(f"解析设备信息异常: {e}")
             return None
-
-    # ---------- 连接与打开 ----------
-
+    
+    # ---- 打开/关闭相机 ----
+    
     def open_camera(self, dev_info) -> bool:
         """
         打开相机设备。
-
+        
         Args:
-            dev_info: MV_CC_DEVICE_INFO 结构体（来自 enumerate_devices 返回的 dev_info）
-
+            dev_info: 设备信息字典（来自 enumerate_devices）
+        
         Returns:
-            bool: 是否成功打开
+            是否成功
         """
-        if not SDK_AVAILABLE:
-            log_error("相机 SDK 不可用")
+        if self._is_open:
+            log_warning("相机已打开，请先关闭")
             return False
-
-        if self._camera is not None:
-            log_info("相机已打开，请先关闭")
-            return False
-
+        
         try:
             self._ensure_sdk_initialized()
-
-            dev_info_parsed = self._parse_device_info(dev_info, 0)
-            if dev_info_parsed:
-                log_info(f"正在打开相机: {dev_info_parsed['model']} ({dev_info_parsed['serial']})")
-
-            self._camera = MvCamera()
-            ret = self._camera.MV_CC_CreateHandle(dev_info)
-            if ret != MV_OK:
-                log_error(f"创建相机句柄失败: {error_code_to_hex(ret)}")
-                self._camera = MvCamera()
-                ret = self._camera.MV_CC_CreateHandleWithoutLog(dev_info)
-                if ret != MV_OK:
-                    log_error(f"CreateHandleWithoutLog 也失败: {error_code_to_hex(ret)}")
-                    self._camera = None
-                    return False
-
-            ret = self._camera.MV_CC_OpenDevice()
-            if ret != MV_OK:
-                log_error(f"打开设备失败: {error_code_to_hex(ret)}")
-                self._camera.MV_CC_DestroyHandle()
-                self._camera = None
+            
+            mgr = CameraManager._device_manager
+            if mgr is None:
+                log_error("DeviceManager 未初始化")
                 return False
-
-            self._device_info = dev_info_parsed
-            log_info(f"相机打开成功: {dev_info_parsed['model']}")
-
-            if dev_info_parsed and dev_info_parsed["tlayer_type"] == MV_GIGE_DEVICE:
-                self._optimize_gige()
-
-            self.set_trigger_mode(False)
-
-            return True
-
-        except Exception as e:
-            log_error(f"打开相机异常: {e}")
-            self._camera = None
-            return False
-
-    def _optimize_gige(self):
-        try:
-            n_packet_size = self._camera.MV_CC_GetOptimalPacketSize()
-            if n_packet_size > 0:
-                ret = self._camera.MV_CC_SetIntValue("GevSCPSPacketSize", n_packet_size)
-                if ret == MV_OK:
-                    log_info(f"GigE 包大小已优化: {n_packet_size}")
-                else:
-                    log_warning(f"设置包大小失败: {error_code_to_hex(ret)}")
+            
+            # 获取设备索引
+            if isinstance(dev_info, dict):
+                index = dev_info.get('index', 0)
             else:
-                log_warning(f"获取最优包大小失败: {error_code_to_hex(n_packet_size)}")
+                index = int(dev_info)
+            
+            # 打开设备
+            self._device = mgr.open_device_by_index(index)
+            if self._device is None:
+                log_error("打开设备失败: 返回空")
+                return False
+            
+            self._device_info = dev_info
+            self._is_open = True
+            
+            # 如果是 GigE 设备，优化网络参数
+            if isinstance(dev_info, dict) and dev_info.get('device_class') == 'GigE':
+                self._optimize_gige()
+            
+            log_info(f"相机已打开: {dev_info.get('display_name', str(index))}")
+            return True
+        
         except Exception as e:
-            log_error(f"GigE 优化异常: {e}")
-
-    # ---------- 关闭 ----------
-
-    def close_camera(self):
+            log_error(f"打开相机失败: {e}")
+            self._device = None
+            self._is_open = False
+            return False
+    
+    def _optimize_gige(self):
+        """优化 GigE 相机网络参数"""
         try:
+            if self._device is None:
+                return
+            
+            # 设置 GigE 数据包大小（需先查询最佳值）
+            try:
+                # 尝试设置 packet size 为 9000（Jumbo Frame）
+                packet_size_feature = getattr(self._device, 'GevSCPSPacketSize', None)
+                if packet_size_feature is not None and packet_size_feature.is_writable():
+                    # 先尝试获取最佳值
+                    try:
+                        # 部分相机支持自动获取最佳包大小
+                        optimal = self._device.GevSCPSPacketSize.get()
+                        if optimal > 0:
+                            packet_size_feature.set(optimal)
+                    except Exception:
+                        packet_size_feature.set(9000)  # 默认 Jumbo Frame
+            except Exception:
+                pass
+            
+            # 设置帧传输模式为尽可能快
+            try:
+                # 设置流通道包延时为 0（最小延迟）
+                delay_feature = getattr(self._device, 'GevSCPD', None)
+                if delay_feature is not None and delay_feature.is_writable():
+                    delay_feature.set(0)
+            except Exception:
+                pass
+            
+            # 设置帧传输包数量
+            try:
+                fw_feature = getattr(self._device, 'GevSCFW', None)
+                if fw_feature is not None and fw_feature.is_writable():
+                    fw_feature.set(4)  # 一次发送 4 个包
+            except Exception:
+                pass
+            
+            log_info("GigE 网络参数已优化")
+        
+        except Exception as e:
+            log_debug(f"GigE 优化异常: {e}")
+    
+    def close_camera(self):
+        """关闭相机"""
+        if not self._is_open:
+            return
+        
+        try:
+            # 先停止取流
             self.stop_grabbing()
-
-            if self._camera is not None:
-                self._camera.MV_CC_CloseDevice()
-                self._camera.MV_CC_DestroyHandle()
-                self._camera = None
-                self._device_info = None
-                self._is_trigger_mode = False
-                log_info("相机关闭成功")
+            
+            # 关闭设备
+            if self._device is not None:
+                self._device.close_device()
+                self._device = None
+            
+            self._is_open = False
+            self._device_info = None
+            log_info("相机已关闭")
+        
         except Exception as e:
             log_error(f"关闭相机异常: {e}")
-
-    # ---------- 触发模式 ----------
-
+            self._is_open = False
+    
+    # ---- 触发模式 ----
+    
     def set_trigger_mode(self, enable: bool) -> bool:
         """
         设置触发模式。
-
+        
         Args:
-            enable: True=触发模式, False=连续采集模式
-
+            enable: True=触发模式（软触发），False=连续采集模式
+        
         Returns:
-            bool: 是否成功
+            是否成功
         """
-        if self._camera is None:
+        if not self._is_open or self._device is None:
+            log_warning("相机未打开")
             return False
-
+        
         try:
+            # 设置采集模式
+            acq_mode = getattr(self._device, 'AcquisitionMode', None)
+            if acq_mode is not None and acq_mode.is_writable():
+                acq_mode.set(GxAcquisitionModeEntry.CONTINUOUS)
+            
+            # 设置触发模式
+            trigger_mode = getattr(self._device, 'TriggerMode', None)
+            if trigger_mode is None or not trigger_mode.is_writable():
+                log_warning("设备不支持 TriggerMode")
+                return False
+            
             if enable:
-                ret = self._camera.MV_CC_SetEnumValue("TriggerMode", 1)
-                if ret != MV_OK:
-                    log_error(f"设置触发模式失败: {error_code_to_hex(ret)}")
-                    return False
-                ret = self._camera.MV_CC_SetEnumValue("TriggerSource", 7)
-                if ret != MV_OK:
-                    log_error(f"设置触发源失败: {error_code_to_hex(ret)}")
-                    return False
+                # 开启触发模式
+                trigger_mode.set(GxSwitchEntry.ON)
                 self._is_trigger_mode = True
-                log_info("已切换为触发模式（软触发）")
+                
+                # 设置触发源为软触发（Software）
+                trigger_source = getattr(self._device, 'TriggerSource', None)
+                if trigger_source is not None and trigger_source.is_writable():
+                    trigger_source.set(GxTriggerSourceEntry.SOFTWARE)
+                
+                # 设置触发选择器为 FrameStart
+                trigger_selector = getattr(self._device, 'TriggerSelector', None)
+                if trigger_selector is not None and trigger_selector.is_writable():
+                    from gxipy.gxidef import GxTriggerSelectorEntry
+                    trigger_selector.set(GxTriggerSelectorEntry.FRAME_START)
+                
+                log_info("触发模式: 已开启（软触发）")
             else:
-                ret = self._camera.MV_CC_SetEnumValue("TriggerMode", 0)
-                if ret != MV_OK:
-                    log_error(f"设置连续模式失败: {error_code_to_hex(ret)}")
-                    return False
                 self._is_trigger_mode = False
-                log_info("已切换为连续采集模式")
+                # 关闭触发模式（连续采集）
+                trigger_mode.set(GxSwitchEntry.OFF)
+                log_info("触发模式: 已关闭（连续采集）")
 
             return True
-
+        
         except Exception as e:
-            log_error(f"设置触发模式异常: {e}")
+            log_error(f"设置触发模式失败: {e}")
             return False
-
+    
     def trigger_once(self) -> bool:
-        """软触发一次（仅在触发模式下有效）"""
-        if self._camera is None or not self._is_trigger_mode:
+        """
+        执行一次软触发（仅在触发模式下有效）。
+        
+        Returns:
+            是否成功
+        """
+        if not self._is_open or self._device is None:
             return False
+        
         try:
-            ret = self._camera.MV_CC_SetCommandValue("TriggerSoftware")
-            return ret == MV_OK
+            trigger_software = getattr(self._device, 'TriggerSoftware', None)
+            if trigger_software is None:
+                log_warning("设备不支持 TriggerSoftware")
+                return False
+            
+            trigger_software.send_command()
+            return True
+        
         except Exception as e:
-            log_error(f"软触发异常: {e}")
+            log_error(f"软触发失败: {e}")
             return False
-
-    @property
-    def is_trigger_mode(self) -> bool:
-        return self._is_trigger_mode
-
-    # ---------- 参数读写 ----------
-
+    
+    # ---- 参数读写 ----
+    
     def get_float_param(self, name: str) -> Optional[float]:
-        if self._camera is None:
+        """获取浮点参数"""
+        if self._device is None:
             return None
         try:
-            st_param = MVCC_FLOATVALUE()
-            ctypes.memset(ctypes.byref(st_param), 0, ctypes.sizeof(MVCC_FLOATVALUE))
-            ret = self._camera.MV_CC_GetFloatValue(name, st_param)
-            if ret == MV_OK:
-                return st_param.fCurValue
+            feature = getattr(self._device, name, None)
+            if feature is None:
+                return None
+            # 检查参数是否可读，避免 "is not readable" 异常
+            if hasattr(feature, 'is_readable') and not feature.is_readable():
+                return None
+            return float(feature.get())
+        except Exception:
             return None
-        except Exception as e:
-            log_error(f"获取参数 {name} 异常: {e}")
-            return None
-
+    
     def set_float_param(self, name: str, value: float) -> bool:
-        if self._camera is None:
+        """设置浮点参数"""
+        if self._device is None:
             return False
         try:
-            ret = self._camera.MV_CC_SetFloatValue(name, float(value))
-            return ret == MV_OK
+            feature = getattr(self._device, name, None)
+            if feature is None or not feature.is_writable():
+                return False
+            feature.set(value)
+            return True
         except Exception as e:
-            log_error(f"设置参数 {name} 异常: {e}")
+            log_debug(f"设置浮点参数 {name}={value} 失败: {e}")
             return False
-
+    
     def get_int_param(self, name: str) -> Optional[int]:
-        if self._camera is None:
+        """获取整数参数"""
+        if self._device is None:
             return None
         try:
-            st_param = MVCC_INTVALUE()
-            ctypes.memset(ctypes.byref(st_param), 0, ctypes.sizeof(MVCC_INTVALUE))
-            ret = self._camera.MV_CC_GetIntValue(name, st_param)
-            if ret == MV_OK:
-                return st_param.nCurValue
+            feature = getattr(self._device, name, None)
+            if feature is None:
+                return None
+            # 检查参数是否可读
+            if hasattr(feature, 'is_readable') and not feature.is_readable():
+                return None
+            return int(feature.get())
+        except Exception:
             return None
-        except Exception as e:
-            log_error(f"获取参数 {name} 异常: {e}")
-            return None
-
+    
     def set_int_param(self, name: str, value: int) -> bool:
-        if self._camera is None:
+        """设置整数参数"""
+        if self._device is None:
             return False
         try:
-            ret = self._camera.MV_CC_SetIntValue(name, value)
-            return ret == MV_OK
+            feature = getattr(self._device, name, None)
+            if feature is None or not feature.is_writable():
+                return False
+            feature.set(value)
+            return True
         except Exception as e:
-            log_error(f"设置参数 {name} 异常: {e}")
+            log_debug(f"设置整数参数 {name}={value} 失败: {e}")
             return False
-
+    
     def get_enum_param(self, name: str) -> Optional[int]:
-        if self._camera is None:
+        """获取枚举参数"""
+        if self._device is None:
             return None
         try:
-            st_param = MVCC_ENUMVALUE()
-            ctypes.memset(ctypes.byref(st_param), 0, ctypes.sizeof(MVCC_ENUMVALUE))
-            ret = self._camera.MV_CC_GetEnumValue(name, st_param)
-            if ret == MV_OK:
-                return st_param.nCurValue
+            feature = getattr(self._device, name, None)
+            if feature is None:
+                return None
+            return int(feature.get())
+        except Exception:
             return None
-        except Exception as e:
-            log_error(f"获取枚举参数 {name} 异常: {e}")
-            return None
-
+    
     def set_enum_param(self, name: str, value: int) -> bool:
-        if self._camera is None:
+        """设置枚举参数"""
+        if self._device is None:
             return False
         try:
-            ret = self._camera.MV_CC_SetEnumValue(name, value)
-            return ret == MV_OK
+            feature = getattr(self._device, name, None)
+            if feature is None or not feature.is_writable():
+                return False
+            feature.set(value)
+            return True
         except Exception as e:
-            log_error(f"设置枚举参数 {name} 异常: {e}")
+            log_debug(f"设置枚举参数 {name}={value} 失败: {e}")
             return False
-
-    # ---------- 常用参数快捷方法 ----------
-
-    def get_exposure_time(self) -> Optional[float]:
-        return self.get_float_param("ExposureTime")
-
+    
+    # ---- 常用参数快捷方法 ----
+    
     def set_exposure_time(self, value_us: float) -> bool:
-        if self._camera is None:
-            return False
-        self.set_enum_param("ExposureAuto", 0)
-        time.sleep(0.05)
-        return self.set_float_param("ExposureTime", value_us)
-
-    def get_gain(self) -> Optional[float]:
-        return self.get_float_param("Gain")
-
+        """
+        设置曝光时间。
+        
+        Args:
+            value_us: 曝光时间（微秒）
+        """
+        return self.set_float_param('ExposureTime', value_us)
+    
     def set_gain(self, value_db: float) -> bool:
-        if self._camera is None:
-            return False
-        self.set_enum_param("GainAuto", 0)
-        time.sleep(0.05)
-        return self.set_float_param("Gain", value_db)
-
+        """
+        设置增益。
+        
+        Args:
+            value_db: 增益值（dB）
+        """
+        return self.set_float_param('Gain', value_db)
+    
+    def get_exposure_time(self) -> Optional[float]:
+        """获取当前曝光时间（微秒）"""
+        return self.get_float_param('ExposureTime')
+    
+    def get_gain(self) -> Optional[float]:
+        """获取当前增益值（dB）"""
+        return self.get_float_param('Gain')
+    
     def get_frame_rate(self) -> Optional[float]:
-        return self.get_float_param("AcquisitionFrameRate")
+        """获取当前帧率（fps）"""
+        return self.get_float_param('AcquisitionFrameRate')
 
     def set_frame_rate(self, value_fps: float) -> bool:
-        return self.set_float_param("AcquisitionFrameRate", value_fps)
-
-    # ---------- 取流控制 ----------
-
+        """
+        设置帧率。
+        
+        Args:
+            value_fps: 帧率（fps）
+        """
+        return self.set_float_param('AcquisitionFrameRate', value_fps)
+    
+    # ---- 图像采集 ----
+    
     def start_grabbing(self, frame_callback: Callable = None) -> bool:
         """
-        开始采集图像。
-
+        开始实时取流。
+        
         Args:
-            frame_callback: 可选的回调函数，接收 (width, height, pixel_type, img_bytes)
-
+            frame_callback: 帧回调函数，签名 callback(width, height, pixel_type, data)
+        
         Returns:
-            bool: 是否成功开始采集
+            是否成功
         """
-        if self._camera is None:
-            log_error("相机未打开，无法开始采集")
+        if not self._is_open or self._device is None:
+            log_warning("相机未打开")
             return False
-
-        if self._is_grabbing:
-            log_info("已在采集中")
-            return True
-
+        
         try:
-            ret = self._camera.MV_CC_StartGrabbing()
-            if ret != MV_OK:
-                log_error(f"开始采集失败: {error_code_to_hex(ret)}")
-                return False
-
-            self._frame_callback = frame_callback  # 保存回调引用
-            self._grabbing_thread = CameraGrabbingThread(self._camera)
+            # 如果已有取流线程在运行，先停止
+            self.stop_grabbing()
+            
+            # 创建并启动取流线程
+            self._grabbing_thread = CameraGrabbingThread(self._device)
+            
             if frame_callback is not None:
                 self._grabbing_thread.frame_received.connect(frame_callback)
+            
             self._grabbing_thread.start()
-            self._is_grabbing = True
-
-            log_info("开始采集图像")
+            log_info("实时取流已开始")
             return True
-
+        
         except Exception as e:
-            log_error(f"开始采集异常: {e}")
+            log_error(f"开始取流失败: {e}")
             return False
-
+    
     def stop_grabbing(self):
-        try:
-            if self._grabbing_thread is not None:
+        """停止实时取流"""
+        if self._grabbing_thread is not None:
+            try:
                 self._grabbing_thread.stop()
-                self._grabbing_thread = None
-
-            if self._camera is not None and self._is_grabbing:
-                self._camera.MV_CC_StopGrabbing()
-                self._is_grabbing = False
-                log_info("停止采集图像")
-        except Exception as e:
-            log_error(f"停止采集异常: {e}")
-
-    # ---------- 单次拍照 ----------
-
+            except Exception as e:
+                log_debug(f"停止取流线程异常: {e}")
+            self._grabbing_thread = None
+            log_info("实时取流已停止")
+    
     def capture_once(self, timeout_ms: int = 3000) -> Optional[Tuple[int, int, int, bytes]]:
         """
-        单次拍照。
-
-        在连续采集模式下，临时停止取流线程，直接从相机获取一帧图像。
-        避免切换触发模式带来的状态不一致问题。
-
+        单次拍照（在连续采集模式下）。
+        
         Args:
-            timeout_ms: 等待图像的超时时间（毫秒）
-
+            timeout_ms: 超时时间（毫秒）
+        
         Returns:
-            (width, height, pixel_type, img_bytes) 或 None
+            (width, height, pixel_type, data) 元组，失败返回 None
         """
-        if self._camera is None:
+        if not self._is_open or self._device is None:
+            log_warning("相机未打开")
             return None
-
+        
         try:
-            was_grabbing = self._is_grabbing
-            # 停止取流线程，避免与 GetImageBuffer 竞争
-            if was_grabbing:
-                self.stop_grabbing()
-
-            # 确保相机正在采集
-            self._camera.MV_CC_StartGrabbing()
-            time.sleep(0.05)
-
-            st_frame = MV_FRAME_OUT()
-            ctypes.memset(ctypes.byref(st_frame), 0, ctypes.sizeof(MV_FRAME_OUT))
-            ret = self._camera.MV_CC_GetImageBuffer(st_frame, timeout_ms)
-
-            if ret == MV_OK:
-                frame_info = st_frame.stFrameInfo
-                width = frame_info.nWidth
-                height = frame_info.nHeight
-                pixel_type = frame_info.enPixelType
-                frame_len = frame_info.nFrameLen
-
-                if st_frame.pBufAddr and frame_len > 0:
-                    buf = (ctypes.c_ubyte * frame_len).from_address(
-                        ctypes.addressof(st_frame.pBufAddr.contents))
-                    img_bytes = bytes(buf)
-                else:
-                    img_bytes = b""
-
-                self._camera.MV_CC_FreeImageBuffer(st_frame)
-
-                # 恢复连续取流
-                if was_grabbing:
-                    self._grabbing_thread = CameraGrabbingThread(self._camera)
-                    if self._frame_callback is not None:
-                        self._grabbing_thread.frame_received.connect(self._frame_callback)
-                    self._grabbing_thread.start()
-                    self._is_grabbing = True
-
-                return (width, height, pixel_type, img_bytes)
+            # 确保流已开启
+            if self._device.data_stream:
+                data_stream = self._device.data_stream[0]
             else:
-                log_error(f"获取图像超时或失败: {error_code_to_hex(ret)}")
-                # 恢复连续取流
-                if was_grabbing:
-                    self._grabbing_thread = CameraGrabbingThread(self._camera)
-                    if self._frame_callback is not None:
-                        self._grabbing_thread.frame_received.connect(self._frame_callback)
-                    self._grabbing_thread.start()
-                    self._is_grabbing = True
+                log_error("设备没有数据流")
                 return None
-
+            
+            # 如果流未开启，开启它
+            try:
+                # 检查是否已开启（通过尝试获取图像来检测）
+                pass
+            except Exception:
+                self._device.stream_on()
+            
+            # 获取图像
+            raw_image = data_stream.get_image(timeout_ms)
+            if raw_image is None:
+                log_warning("单次拍照超时")
+                return None
+            
+            # 提取图像信息
+            width = raw_image.get_width()
+            height = raw_image.get_height()
+            pixel_format = raw_image.get_pixel_format()
+            frame_data = raw_image.get_data()
+            
+            if frame_data is None or width == 0 or height == 0:
+                log_warning("单次拍照返回空数据")
+                return None
+            
+            pixel_type = _daheng_pf_to_compat(pixel_format)
+            
+            log_info(f"单次拍照成功: {width}x{height}, pixel_type=0x{pixel_type:08X}")
+            return (width, height, pixel_type, bytes(frame_data))
+        
         except Exception as e:
             log_error(f"单次拍照异常: {e}")
-            # 异常时也尝试恢复取流
-            try:
-                if was_grabbing and not self._is_grabbing:
-                    self._grabbing_thread = CameraGrabbingThread(self._camera)
-                    if self._frame_callback is not None:
-                        self._grabbing_thread.frame_received.connect(self._frame_callback)
-                    self._grabbing_thread.start()
-                    self._is_grabbing = True
-            except Exception:
-                pass
             return None
-
-    # ---------- 图像显示辅助 ----------
-
+    
+    # ---- 图像显示工具 ----
+    
     @staticmethod
     def convert_to_qimage(width: int, height: int, pixel_type: int,
-                          img_bytes: bytes) -> Optional[QImage]:
+                          frame_data: bytes) -> Optional[QImage]:
         """
-        将相机帧数据转换为 QImage。
-
+        将相机帧数据转换为 QImage（兼容旧版接口）。
+        
         Args:
-            width: 图像宽度
+            width:  图像宽度
             height: 图像高度
-            pixel_type: 像素格式枚举值
-            img_bytes: 原始帧字节数据
-
+            pixel_type: 像素格式
+            frame_data: 原始帧数据
+        
         Returns:
             QImage 对象，失败返回 None
         """
         try:
-            if pixel_type == PixelType_Gvsp_Mono8:
-                return QImage(img_bytes, width, height, width, QImage.Format_Grayscale8)
+            cv_img = raw_to_opencv(frame_data, width, height, pixel_type)
+            if cv_img is None:
+                return None
+            
+            h, w = cv_img.shape[:2]
+            if cv_img.ndim == 2:
+                # 灰度图
+                return QImage(cv_img.data, w, h, w, QImage.Format_Grayscale8)
             else:
-                cv_img = raw_to_opencv(img_bytes, width, height, pixel_type)
-                if cv_img is None:
-                    return None
-                if len(cv_img.shape) == 2:
-                    h, w = cv_img.shape
-                    return QImage(cv_img.data, w, h, w, QImage.Format_Grayscale8)
-                else:
-                    h, w, ch = cv_img.shape
-                    rgb_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-                    return QImage(rgb_img.data, w, h, ch * w, QImage.Format_RGB888)
+                # BGR → RGB
+                rgb_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+                return QImage(rgb_img.data, w, h, w * 3, QImage.Format_RGB888)
+        
         except Exception as e:
-            log_error(f"转换为 QImage 失败: {e}")
+            log_error(f"convert_to_qimage 失败: {e}")
             return None
-
+    
     @staticmethod
     def display_on_label(label, width: int, height: int, pixel_type: int,
-                         img_bytes: bytes):
+                         frame_data: bytes):
         """
-        将相机帧数据显示在 QLabel 上（自动缩放）。
-
+        将相机帧数据显示在 QLabel 上（兼容旧版接口）。
+        
         Args:
-            label: QLabel 控件
-            width: 图像宽度
-            height: 图像高度
-            pixel_type: 像素格式枚举值
-            img_bytes: 原始帧字节数据
+            label:       QLabel 对象
+            width:       图像宽度
+            height:      图像高度
+            pixel_type:  像素格式
+            frame_data:  原始帧数据
         """
         try:
-            qimg = CameraManager.convert_to_qimage(width, height, pixel_type, img_bytes)
-            if qimg is None:
+            qimage = CameraManager.convert_to_qimage(width, height, pixel_type, frame_data)
+            if qimage is None:
                 return
-            pixmap = QPixmap.fromImage(qimg)
-            scaled = pixmap.scaled(label.size(), aspectRatioMode=True,
-                                   transformMode=True)
-            label.setPixmap(scaled)
+            
+            pixmap = QPixmap.fromImage(qimage)
+            label.setPixmap(pixmap)
+        
         except Exception as e:
-            log_error(f"显示图像失败: {e}")
-
-    # ---------- 属性 ----------
-
-    @property
-    def is_open(self) -> bool:
-        return self._camera is not None
-
-    @property
-    def is_grabbing(self) -> bool:
-        return self._is_grabbing
-
-    @property
-    def device_info(self) -> Optional[Dict[str, Any]]:
-        return self._device_info
-
-    @property
-    def camera_handle(self):
-        return self._camera
+            log_error(f"display_on_label 失败: {e}")

@@ -244,7 +244,7 @@ class CameraPanel(QWidget):
             """)
         self.exp_auto_check = QCheckBox("自动曝光")
         self.exp_auto_check.setStyleSheet("color: #d4d4d4;")
-        self.exp_auto_check.setChecked(True)  # 默认开启自动曝光
+        self.exp_auto_check.setChecked(False)  # 默认关闭自动曝光，使用固定值
 
         exp_btn_layout.addWidget(self.exp_minus_btn)
         exp_btn_layout.addWidget(self.exp_plus_btn)
@@ -289,7 +289,7 @@ class CameraPanel(QWidget):
             """)
         self.gain_auto_check = QCheckBox("自动增益")
         self.gain_auto_check.setStyleSheet("color: #d4d4d4;")
-        self.gain_auto_check.setChecked(True)  # 默认开启自动增益
+        self.gain_auto_check.setChecked(False)  # 默认关闭自动增益，使用固定值
 
         gain_btn_layout.addWidget(self.gain_minus_btn)
         gain_btn_layout.addWidget(self.gain_plus_btn)
@@ -340,11 +340,100 @@ class CameraPanel(QWidget):
         fps_layout.addLayout(fps_slider_layout)
         fps_layout.addLayout(fps_btn_layout)
 
+        # -- 白平衡 --
+        wb_group = QGroupBox("白平衡")
+        wb_group.setStyleSheet(trigger_group.styleSheet())
+        wb_layout = QVBoxLayout(wb_group)
+        wb_layout.setContentsMargins(8, 8, 8, 8)
+        wb_layout.setSpacing(4)
+
+        # 白平衡预设按钮
+        wb_preset_layout = QHBoxLayout()
+        self.wb_preset_combo = QComboBox()
+        self.wb_preset_combo.addItems(["自定义", "日光 (6500K)", "荧光灯 (4000K)", "白炽灯 (2800K)"])
+        self.wb_preset_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; border-radius: 3px;
+                padding: 4px 8px;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background-color: #2d2d2d; color: #d4d4d4;
+                selection-background-color: #1a3a5c;
+            }
+        """)
+        self.wb_apply_btn = QPushButton("应用")
+        self.wb_apply_btn.setFixedWidth(50)
+        self.wb_apply_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; border-radius: 3px;
+                font-weight: bold; padding: 4px 8px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; }
+        """)
+        wb_preset_layout.addWidget(QLabel("预设:"), 0)
+        wb_preset_layout.addWidget(self.wb_preset_combo, 1)
+        wb_preset_layout.addWidget(self.wb_apply_btn)
+
+        # R 通道滑块
+        r_layout = QHBoxLayout()
+        r_label = QLabel("R:")
+        r_label.setStyleSheet("color: #ef5350; font-weight: bold;")
+        self.wb_r_slider = QSlider(Qt.Horizontal)
+        self.wb_r_slider.setRange(50, 300)  # 0.5 ~ 3.0
+        self.wb_r_slider.setValue(150)      # 1.5
+        self.wb_r_value = QLabel("1.50")
+        self.wb_r_value.setMinimumWidth(40)
+        self.wb_r_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.wb_r_value.setStyleSheet("color: #ef5350; font-weight: bold;")
+        r_layout.addWidget(r_label)
+        r_layout.addWidget(self.wb_r_slider, 1)
+        r_layout.addWidget(self.wb_r_value)
+
+        # G 通道滑块
+        g_layout = QHBoxLayout()
+        g_label = QLabel("G:")
+        g_label.setStyleSheet("color: #66bb6a; font-weight: bold;")
+        self.wb_g_slider = QSlider(Qt.Horizontal)
+        self.wb_g_slider.setRange(50, 300)  # 0.5 ~ 3.0
+        self.wb_g_slider.setValue(100)      # 1.0
+        self.wb_g_value = QLabel("1.00")
+        self.wb_g_value.setMinimumWidth(40)
+        self.wb_g_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.wb_g_value.setStyleSheet("color: #66bb6a; font-weight: bold;")
+        g_layout.addWidget(g_label)
+        g_layout.addWidget(self.wb_g_slider, 1)
+        g_layout.addWidget(self.wb_g_value)
+
+        # B 通道滑块
+        b_layout = QHBoxLayout()
+        b_label = QLabel("B:")
+        b_label.setStyleSheet("color: #42a5f5; font-weight: bold;")
+        self.wb_b_slider = QSlider(Qt.Horizontal)
+        self.wb_b_slider.setRange(50, 300)  # 0.5 ~ 3.0
+        self.wb_b_slider.setValue(180)      # 1.8
+        self.wb_b_value = QLabel("1.80")
+        self.wb_b_value.setMinimumWidth(40)
+        self.wb_b_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.wb_b_value.setStyleSheet("color: #42a5f5; font-weight: bold;")
+        b_layout.addWidget(b_label)
+        b_layout.addWidget(self.wb_b_slider, 1)
+        b_layout.addWidget(self.wb_b_value)
+
+        wb_layout.addLayout(wb_preset_layout)
+        wb_layout.addLayout(r_layout)
+        wb_layout.addLayout(g_layout)
+        wb_layout.addLayout(b_layout)
+
         # 组装参数面板
         param_layout.addWidget(trigger_group)
         param_layout.addWidget(exp_group)
         param_layout.addWidget(gain_group)
         param_layout.addWidget(fps_group)
+        param_layout.addWidget(wb_group)
         param_layout.addStretch()
 
         splitter.addWidget(display_widget)
@@ -366,6 +455,13 @@ class CameraPanel(QWidget):
         main_layout.addLayout(ctrl_layout)
         main_layout.addWidget(splitter, 1)
         main_layout.addWidget(self.status_bar)
+
+        # 白平衡控件初始状态：禁用（相机未打开时不可调节）
+        self.wb_r_slider.setEnabled(False)
+        self.wb_g_slider.setEnabled(False)
+        self.wb_b_slider.setEnabled(False)
+        self.wb_preset_combo.setEnabled(False)
+        self.wb_apply_btn.setEnabled(False)
 
     def _connect_signals(self):
         """连接信号与槽"""
@@ -394,6 +490,12 @@ class CameraPanel(QWidget):
         self.fps_slider.valueChanged.connect(self._on_fps_slider_changed)
         self.fps_minus_btn.clicked.connect(lambda: self._adjust_frame_rate(-self.FRAME_RATE_STEP))
         self.fps_plus_btn.clicked.connect(lambda: self._adjust_frame_rate(self.FRAME_RATE_STEP))
+
+        # 白平衡
+        self.wb_r_slider.valueChanged.connect(self._on_wb_r_changed)
+        self.wb_g_slider.valueChanged.connect(self._on_wb_g_changed)
+        self.wb_b_slider.valueChanged.connect(self._on_wb_b_changed)
+        self.wb_apply_btn.clicked.connect(self._on_wb_apply_preset)
 
     # ========== 设备枚举 ==========
 
@@ -437,7 +539,7 @@ class CameraPanel(QWidget):
                 model = device.get("model", "")
                 serial = device.get("serial", "")
                 ip = device.get("ip", "")
-                dev_info = device.get("dev_info")
+                dev_info = device.get("_raw_info")
                 if dev_info is None:
                     continue
 
@@ -507,9 +609,17 @@ class CameraPanel(QWidget):
             self.display_label.clear_pixmap()
             self.display_label.setText("实时画面中...")
 
-            # 默认开启自动曝光和自动增益
-            self.cam_mgr.set_enum_param("ExposureAuto", 1)
-            self.cam_mgr.set_enum_param("GainAuto", 1)
+            # 关闭自动曝光和自动增益，使用固定参数
+            self.cam_mgr.set_enum_param("ExposureAuto", 0)  # GxAutoEntry.OFF
+            self.cam_mgr.set_enum_param("GainAuto", 0)       # GxAutoEntry.OFF
+
+            # 设置固定曝光时间和增益
+            self.cam_mgr.set_exposure_time(18000.0)           # 曝光时间 18000 µs
+            self.cam_mgr.set_gain(0.0)                        # 增益 0 dB
+
+            # 设置白平衡系数（关闭自动白平衡，手动设置 R/G/B 三通道独立系数）
+            # 画面偏绿校正：降低 G 通道（1.0），适当提升 R（1.5）和 B（1.8）
+            self._set_white_balance(ratio_r=1.5, ratio_g=1.0, ratio_b=1.8)
 
             # 读取当前参数并更新 UI
             self._refresh_params()
@@ -521,6 +631,13 @@ class CameraPanel(QWidget):
             self.gain_slider.setEnabled(not self.gain_auto_check.isChecked())
             self.gain_minus_btn.setEnabled(not self.gain_auto_check.isChecked())
             self.gain_plus_btn.setEnabled(not self.gain_auto_check.isChecked())
+
+            # 启用白平衡控件
+            self.wb_r_slider.setEnabled(True)
+            self.wb_g_slider.setEnabled(True)
+            self.wb_b_slider.setEnabled(True)
+            self.wb_preset_combo.setEnabled(True)
+            self.wb_apply_btn.setEnabled(True)
 
             msg = "相机已打开"
             self.status_bar.showMessage(msg)
@@ -550,12 +667,63 @@ class CameraPanel(QWidget):
             self.gain_value_label.setText("-- dB")
             self.fps_value_label.setText("-- fps")
 
+            # 禁用白平衡控件
+            self.wb_r_slider.setEnabled(False)
+            self.wb_g_slider.setEnabled(False)
+            self.wb_b_slider.setEnabled(False)
+            self.wb_preset_combo.setEnabled(False)
+            self.wb_apply_btn.setEnabled(False)
+
             msg = "相机已关闭"
             self.status_bar.showMessage(msg)
             self.status_message.emit(msg)
             log_info("相机已关闭")
         except RuntimeError:
             pass
+
+    # ========== 白平衡设置 ==========
+
+    def _set_white_balance(self, ratio_r: float = 1.5, ratio_g: float = 1.0, ratio_b: float = 1.8):
+        """
+        设置白平衡系数（关闭自动白平衡，手动设置 R/G/B 三通道独立系数）。
+
+        Daheng SDK 通过 BalanceRatioSelector 选择通道（Red=0, Green=1, Blue=2），
+        然后通过 BalanceRatio 设置对应通道的系数。
+
+        画面偏绿的原因通常是 G 通道增益相对 R/B 过高。
+        默认值 ratio_g=1.0（降低绿色），ratio_r=1.5（提升红色），ratio_b=1.8（提升蓝色），
+        以校正偏绿问题。用户可根据实际画面微调。
+
+        Args:
+            ratio_r: Red 通道系数（默认 1.5）
+            ratio_g: Green 通道系数（默认 1.0，降低绿色以校正偏绿）
+            ratio_b: Blue 通道系数（默认 1.8，提升蓝色以校正偏绿）
+        """
+        if not self.cam_mgr.is_open:
+            return
+
+        try:
+            # 关闭自动白平衡
+            self.cam_mgr.set_enum_param("BalanceWhiteAuto", 0)  # GxAutoEntry.OFF
+
+            # 分别设置 R、G、B 三个通道的独立系数
+            from gxipy.gxidef import GxBalanceRatioSelectorEntry
+
+            # Red 通道
+            self.cam_mgr.set_enum_param("BalanceRatioSelector", GxBalanceRatioSelectorEntry.RED)
+            self.cam_mgr.set_float_param("BalanceRatio", ratio_r)
+
+            # Green 通道（降低绿色以校正偏绿）
+            self.cam_mgr.set_enum_param("BalanceRatioSelector", GxBalanceRatioSelectorEntry.GREEN)
+            self.cam_mgr.set_float_param("BalanceRatio", ratio_g)
+
+            # Blue 通道（提升蓝色以校正偏绿）
+            self.cam_mgr.set_enum_param("BalanceRatioSelector", GxBalanceRatioSelectorEntry.BLUE)
+            self.cam_mgr.set_float_param("BalanceRatio", ratio_b)
+
+            log_info(f"白平衡系数已设置: R={ratio_r:.2f}, G={ratio_g:.2f}, B={ratio_b:.2f}")
+        except Exception as e:
+            log_error(f"设置白平衡失败: {e}")
 
     # ========== 参数刷新 ==========
 
@@ -714,6 +882,66 @@ class CameraPanel(QWidget):
         if self.cam_mgr.set_frame_rate(new_val):
             self._refresh_params()
             self.status_bar.showMessage(f"帧率: {new_val:.1f} fps")
+
+    # ========== 白平衡控制 ==========
+
+    def _apply_white_balance(self):
+        """将当前滑块值应用到相机"""
+        if not self.cam_mgr.is_open:
+            return
+        r = self.wb_r_slider.value() / 100.0
+        g = self.wb_g_slider.value() / 100.0
+        b = self.wb_b_slider.value() / 100.0
+        self._set_white_balance(ratio_r=r, ratio_g=g, ratio_b=b)
+        self.status_bar.showMessage(f"白平衡: R={r:.2f}, G={g:.2f}, B={b:.2f}")
+
+    def _on_wb_r_changed(self, value):
+        """Red 通道滑块变化"""
+        val = value / 100.0
+        self.wb_r_value.setText(f"{val:.2f}")
+        self.wb_preset_combo.setCurrentIndex(0)  # 切换回"自定义"
+        self._apply_white_balance()
+
+    def _on_wb_g_changed(self, value):
+        """Green 通道滑块变化"""
+        val = value / 100.0
+        self.wb_g_value.setText(f"{val:.2f}")
+        self.wb_preset_combo.setCurrentIndex(0)
+        self._apply_white_balance()
+
+    def _on_wb_b_changed(self, value):
+        """Blue 通道滑块变化"""
+        val = value / 100.0
+        self.wb_b_value.setText(f"{val:.2f}")
+        self.wb_preset_combo.setCurrentIndex(0)
+        self._apply_white_balance()
+
+    def _on_wb_apply_preset(self):
+        """应用白平衡预设"""
+        idx = self.wb_preset_combo.currentIndex()
+        if idx == 0:
+            return  # 自定义，不做改变
+        presets = {
+            1: (1.8, 1.0, 1.2),   # 日光 6500K: 偏蓝，提升 R，降低 B
+            2: (1.5, 1.0, 1.6),   # 荧光灯 4000K: 偏绿，降低 G
+            3: (1.2, 1.0, 2.0),   # 白炽灯 2800K: 偏黄/红，提升 B
+        }
+        if idx in presets:
+            r, g, b = presets[idx]
+            self.wb_r_slider.blockSignals(True)
+            self.wb_g_slider.blockSignals(True)
+            self.wb_b_slider.blockSignals(True)
+            self.wb_r_slider.setValue(int(r * 100))
+            self.wb_g_slider.setValue(int(g * 100))
+            self.wb_b_slider.setValue(int(b * 100))
+            self.wb_r_slider.blockSignals(False)
+            self.wb_g_slider.blockSignals(False)
+            self.wb_b_slider.blockSignals(False)
+            self.wb_r_value.setText(f"{r:.2f}")
+            self.wb_g_value.setText(f"{g:.2f}")
+            self.wb_b_value.setText(f"{b:.2f}")
+            self._apply_white_balance()
+            self.status_bar.showMessage(f"白平衡预设: {self.wb_preset_combo.currentText()}")
 
     # ========== 帧回调与拍照 ==========
 
