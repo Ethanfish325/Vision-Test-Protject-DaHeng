@@ -24,6 +24,34 @@ class VisionEngine:
     def set_pipeline(self, pipeline: Pipeline):
         self._pipeline = pipeline
 
+    def set_pipeline_by_name(self, scheme_name: str) -> bool:
+        """按方案名称加载并设置流水线
+
+        Args:
+            scheme_name: 方案名称（不含 .json 后缀）
+
+        Returns:
+            bool: 是否加载成功
+        """
+        from core.paths import SCHEME_DIR
+        import os, json
+
+        scheme_path = os.path.join(SCHEME_DIR, f"{scheme_name}.json")
+        if not os.path.exists(scheme_path):
+            log_error(f"方案文件不存在: {scheme_path}")
+            return False
+
+        try:
+            with open(scheme_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            pipeline = Pipeline.from_dict(data)
+            self._pipeline = pipeline
+            log_info(f"按名称加载方案 [{scheme_name}] 成功")
+            return True
+        except Exception as e:
+            log_error(f"加载方案 [{scheme_name}] 失败: {e}")
+            return False
+
     def clear_pipeline(self):
         self._pipeline = None
 

@@ -1,0 +1,29 @@
+{
+  "name": "测试产品方案",
+  "description": "",
+  "camera": {
+    "exposure_time": 18000,
+    "gain": 0.0
+  },
+  "motion": {
+    "axis": 1,
+    "v_max": 50000,
+    "a_max": 100000,
+    "origin_position": 0,
+    "move_timeout_s": 10
+  },
+  "di_bit": 3,
+  "poll_interval_ms": 50,
+  "positions": [
+    {
+      "name": "False",
+      "position": -50000,
+      "scheme": "位置1方案"
+    },
+    {
+      "name": "False",
+      "position": -25000,
+      "scheme": "位置2方案"
+    }
+  ]
+}

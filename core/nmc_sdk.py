@@ -488,6 +488,8 @@ class NMCSDK:
         ]
         dll.MCF_Set_Axis_Profile_Net.restype = RET
 
+        # 注意：MCF_Uniaxial_Net 的第二个参数在某些DLL版本中可能是 c_long
+        # 这里同时保留 c_double 和 c_long 两个版本
         dll.MCF_Uniaxial_Net.argtypes = [ctypes.c_uint16, ctypes.c_double, ctypes.c_uint16, ctypes.c_uint16]
         dll.MCF_Uniaxial_Net.restype = RET
 
@@ -911,6 +913,22 @@ class NMCSDK:
         """单轴运动: position_mode: 0=绝对, 1=相对 (需先调用 set_axis_profile)"""
         return self._dll.MCF_Uniaxial_Net(
             ctypes.c_uint16(axis), ctypes.c_double(dist), ctypes.c_uint16(position_mode), ctypes.c_uint16(station))
+
+    def uniaxial_int(self, axis: int, dist: int, position_mode: int, station: int = 0) -> int:
+        """单轴运动（int版本）: 使用 c_long 传递距离值，兼容某些DLL版本"""
+        return self._dll.MCF_Uniaxial_Net(
+            ctypes.c_uint16(axis), ctypes.c_long(dist), ctypes.c_uint16(position_mode), ctypes.c_uint16(station))
+
+    def uniaxial_long(self, axis: int, dist: int, position_mode: int, station: int = 0) -> int:
+        """单轴运动（独立函数句柄，c_long版本）:
+        使用独立的 ctypes 函数句柄，避免与主 argtypes(c_double) 冲突。
+        适用于 DLL 第二个参数实际为 c_long 的版本。
+        """
+        _MCF_Uniaxial_Long = self._dll.MCF_Uniaxial_Net
+        _MCF_Uniaxial_Long.argtypes = [ctypes.c_uint16, ctypes.c_long, ctypes.c_uint16, ctypes.c_uint16]
+        _MCF_Uniaxial_Long.restype = ctypes.c_int16
+        return _MCF_Uniaxial_Long(
+            ctypes.c_uint16(axis), ctypes.c_long(dist), ctypes.c_uint16(position_mode), ctypes.c_uint16(station))
 
     def axis_stop(self, axis: int, stop_mode: int, station: int = 0) -> int:
         """停止轴: stop_mode: 0=立即停止, 1=减速停止"""

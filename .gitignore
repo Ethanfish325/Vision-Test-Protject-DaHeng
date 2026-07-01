@@ -19,11 +19,16 @@ env/
 # Project specific - build output
 build/
 dist.zip
+*.spec
 
 # Data - keep structure but ignore runtime data
 data/errors/
 data/logs/
 data/config.json
+
+# Model - deleted sample directories (no longer exist)
+model/deep/
+model/titile/
 
 # OS
 Thumbs.db

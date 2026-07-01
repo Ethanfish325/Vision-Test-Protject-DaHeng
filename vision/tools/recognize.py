@@ -319,8 +319,24 @@ class TemplateMatch(VisionTool):
             x1, y1 = locations[i]
             for j in keep:
                 x2, y2 = locations[j]
+                # 计算两个框的 IoU（交并比）
+                # 框1: (x1, y1, x1+w, y1+h)
+                # 框2: (x2, y2, x2+w, y2+h)
+                inter_x1 = max(x1, x2)
+                inter_y1 = max(y1, y2)
+                inter_x2 = min(x1 + w, x2 + w)
+                inter_y2 = min(y1 + h, y2 + h)
+
+                inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+                box1_area = w * h
+                box2_area = w * h
+                union_area = box1_area + box2_area - inter_area
+
+                iou = inter_area / union_area if union_area > 0 else 0
+
+                # 同时检查中心点距离和 IoU，任一条件满足即认为重叠
                 dist = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
-                if dist < min_distance:
+                if dist < min_distance or iou > 0.3:
                     should_keep = False
                     break
             if should_keep:

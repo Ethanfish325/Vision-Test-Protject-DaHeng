@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import os
+import time
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
@@ -30,7 +31,9 @@ from .widgets.result_panel import ResultPanel
 
 from core.serial_comm import SerialCommManager
 from core.serial_test_workflow import SerialTestWorkflow, WorkflowConfig
-from core.nmc_sdk import NMCSDK
+from core.nmc_sdk import NMCSDK, Axis_1, Axis_2, Axis_3, Axis_4, Stop_Smooth, Stop_Abrupt
+from core.inspection_workflow import InspectionWorkflow
+from core.product_manager import list_products, load_product, save_product, create_default_config
 
 import hashlib
 from core.paths import USERS_FILE
@@ -208,8 +211,16 @@ class MainWindow(QMainWindow):
         self._serial_comm: Optional[SerialCommManager] = None
         self._serial_workflow: Optional[SerialTestWorkflow] = None
 
-        # 运动控制卡
+        # 运动控制卡 - 在初始化时连接
         self._nmc_sdk: Optional[NMCSDK] = None
+        self._init_nmc()
+
+        # 自动化检测工作流
+        self._inspection_workflow: Optional[InspectionWorkflow] = None
+        self._init_inspection_workflow()
+
+        # 自动化检测面板（在 _build_automation_page 中创建）
+        self._inspection_panel = None
 
         self._setup_ui()
         self._load_schemes()
@@ -237,6 +248,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.stack, 1)
 
         self._build_worker_page()
+
+        self._build_automation_page()
 
         self._build_engineer_page()
 
@@ -274,6 +287,21 @@ class MainWindow(QMainWindow):
             QPushButton:hover { background-color: #4a4a4a; }
         """)
 
+        self.btn_automation_mode = QPushButton("🤖 自动化模式")
+        self.btn_automation_mode.setCheckable(True)
+        self.btn_automation_mode.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
+                border: 1px solid #555; border-radius: 3px; font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:checked {
+                background-color: #1a3a2a; border: 1px solid #4CAF50;
+                color: #66BB6A;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+        """)
+
         self.btn_engineer_mode = QPushButton("⚙ 设计模式")
         self.btn_engineer_mode.setCheckable(True)
         self.btn_engineer_mode.setEnabled(True)  # 默认操作员模式，禁用设计模式
@@ -295,6 +323,7 @@ class MainWindow(QMainWindow):
         """)
 
         layout.addWidget(self.btn_worker_mode)
+        layout.addWidget(self.btn_automation_mode)
         layout.addWidget(self.btn_engineer_mode)
         layout.addStretch()
 
@@ -304,26 +333,27 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.mode_scheme_label)
 
         self.btn_worker_mode.clicked.connect(lambda: self._switch_mode(0))
-        self.btn_engineer_mode.clicked.connect(lambda: self._switch_mode(1))
+        self.btn_automation_mode.clicked.connect(lambda: self._switch_mode(1))
+        self.btn_engineer_mode.clicked.connect(lambda: self._switch_mode(2))
 
         parent_layout.addWidget(toolbar)
 
     def _switch_mode(self, index: int):
         # 如果尝试切换到设计模式但当前用户不是工程师/管理员，阻止切换
-        if index == 1 and self._current_user_role not in ("engineer", "admin"):
+        if index == 2 and self._current_user_role not in ("engineer", "admin"):
             QMessageBox.warning(self, "权限不足", "请先通过「用户」菜单登录工程师账号")
             self.btn_worker_mode.setChecked(True)
+            self.btn_automation_mode.setChecked(False)
             self.btn_engineer_mode.setChecked(False)
             return
 
         self.stack.setCurrentIndex(index)
         self.btn_worker_mode.setChecked(index == 0)
-        self.btn_engineer_mode.setChecked(index == 1)
+        self.btn_automation_mode.setChecked(index == 1)
+        self.btn_engineer_mode.setChecked(index == 2)
 
-        if index == 0:
-            self.status_label.setText("生产模式")
-        else:
-            self.status_label.setText("设计模式")
+        mode_names = {0: "生产模式", 1: "自动化模式", 2: "设计模式"}
+        self.status_label.setText(mode_names.get(index, "未知模式"))
 
     # ──────────────── 用户登录 / 权限控制 ────────────────
 
@@ -685,6 +715,51 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "成功", f"方案「{name}」已导入并应用")
         self._update_auto_test_btn_state()
 
+    # ──────────────── 自动化模式页面 ────────────────
+
+    def _build_automation_page(self):
+        """构建自动化检测模式页面"""
+        from ui.inspection_panel import InspectionPanel
+
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self._inspection_panel = InspectionPanel(
+            workflow=self._inspection_workflow,
+            parent=page
+        )
+        layout.addWidget(self._inspection_panel, 1)
+
+        self.stack.addWidget(page)
+
+    # ──────────────── NMC 初始化 ────────────────
+
+    def _init_nmc(self):
+        """初始化 NMC 运动控制卡连接"""
+        from core.nmc_sdk import Switch_State_Series
+        self._nmc_sdk = None
+        try:
+            sdk = NMCSDK()
+            sdk.load_dll()  # 失败会抛出异常
+            sdk.set_switch_state(Switch_State_Series)
+            sdk.connect()   # 失败会抛出异常
+            self._nmc_sdk = sdk
+            log_info("NMC 运动控制卡初始化成功")
+        except Exception as e:
+            log_warning(f"NMC 运动控制卡初始化失败: {e}，运动控制功能不可用")
+            self._nmc_sdk = None
+
+    def _init_inspection_workflow(self):
+        """初始化自动化检测工作流"""
+        self._inspection_workflow = InspectionWorkflow(
+            nmc_sdk=self._nmc_sdk,
+            camera_mgr=self.camera_mgr,
+            vision_engine=self.vision_engine,
+            parent=self
+        )
+
     def _build_engineer_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -858,10 +933,38 @@ class MainWindow(QMainWindow):
         self.eng_log = StepLogPanel()
         self.eng_log.setMaximumHeight(100)
 
+        # 右侧标签页：流水线编辑 / 产品配置 / 轴控制
+        self.eng_right_tabs = QTabWidget()
+        self.eng_right_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #444; background-color: #2d2d2d;
+                border-radius: 3px;
+            }
+            QTabBar::tab {
+                background-color: #3c3c3c; color: #d4d4d4;
+                padding: 6px 14px; border: 1px solid #444;
+                border-bottom: none; border-top-left-radius: 3px;
+                border-top-right-radius: 3px; font-size: 13px;
+            }
+            QTabBar::tab:selected {
+                background-color: #2d2d2d; color: #4A90D9;
+                border-bottom: 1px solid #2d2d2d;
+            }
+            QTabBar::tab:hover { background-color: #4a4a4a; }
+        """)
+
+        # ── 标签页1: 流水线编辑 ──
         self.pipeline_editor = PipelineEditor()
+        self.eng_right_tabs.addTab(self.pipeline_editor, "📋 流水线编辑")
+
+        # ── 标签页2: 产品配置 ──
+        self._build_product_config_tab()
+
+        # ── 标签页3: 轴控制 ──
+        self._build_axis_control_tab()
 
         right_eng_layout.addWidget(self.eng_log)
-        right_eng_layout.addWidget(self.pipeline_editor, 1)
+        right_eng_layout.addWidget(self.eng_right_tabs, 1)
 
         eng_splitter.addWidget(left_eng_panel)
         eng_splitter.addWidget(right_eng_panel)
@@ -882,6 +985,1026 @@ class MainWindow(QMainWindow):
         self.pipeline_editor.pipeline_changed.connect(self._on_editor_changed)
 
         self.stack.addWidget(page)
+
+    # ──────────────── 产品配置标签页 ────────────────
+
+    def _build_product_config_tab(self):
+        """构建产品配置标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        # 产品列表
+        list_label = QLabel("产品型号列表:")
+        list_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #d4d4d4;")
+
+        self._eng_product_list = QListWidget()
+        self._eng_product_list.setStyleSheet("""
+            QListWidget {
+                background-color: #1e1e1e; color: #d4d4d4;
+                border: 1px solid #444; border-radius: 3px;
+                font-size: 13px;
+            }
+            QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #333; }
+            QListWidget::item:selected { background-color: #1a3a5c; color: #4A90D9; }
+            QListWidget::item:hover { background-color: #3a3a3a; }
+        """)
+
+        # 按钮组
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(6)
+
+        self._eng_btn_new_product = QPushButton("新建产品")
+        self._eng_btn_edit_product = QPushButton("编辑")
+        self._eng_btn_delete_product = QPushButton("删除")
+        self._eng_btn_refresh_products = QPushButton("刷新")
+
+        for btn in [self._eng_btn_new_product, self._eng_btn_edit_product,
+                    self._eng_btn_delete_product, self._eng_btn_refresh_products]:
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3c3c3c; color: #d4d4d4;
+                    padding: 4px 10px; border: 1px solid #555;
+                    border-radius: 3px; font-size: 12px;
+                }
+                QPushButton:hover { background-color: #4a4a4a; }
+            """)
+
+        btn_layout.addWidget(self._eng_btn_new_product)
+        btn_layout.addWidget(self._eng_btn_edit_product)
+        btn_layout.addWidget(self._eng_btn_delete_product)
+        btn_layout.addWidget(self._eng_btn_refresh_products)
+        btn_layout.addStretch()
+
+        layout.addWidget(list_label)
+        layout.addWidget(self._eng_product_list, 1)
+        layout.addLayout(btn_layout)
+
+        self.eng_right_tabs.addTab(tab, "📦 产品配置")
+
+        # 连接信号
+        self._eng_btn_new_product.clicked.connect(self._on_new_product)
+        self._eng_btn_edit_product.clicked.connect(self._on_edit_product)
+        self._eng_btn_delete_product.clicked.connect(self._on_delete_product)
+        self._eng_btn_refresh_products.clicked.connect(self._refresh_product_list)
+
+        # 初始加载
+        self._refresh_product_list()
+
+    def _refresh_product_list(self):
+        """刷新产品列表"""
+        self._eng_product_list.clear()
+        try:
+            products = list_products()
+            for name in products:
+                self._eng_product_list.addItem(name)
+        except Exception as e:
+            log_error(f"加载产品列表失败: {e}")
+
+    def _on_new_product(self):
+        """新建产品"""
+        dialog = ProductConfigDialog(self, mode="new")
+        if dialog.exec_() == QDialog.Accepted:
+            self._refresh_product_list()
+            # 通知自动化面板刷新
+            if self._inspection_panel is not None:
+                self._inspection_panel.refresh_products()
+
+    def _on_edit_product(self):
+        """编辑产品"""
+        current = self._eng_product_list.currentItem()
+        if current is None:
+            QMessageBox.warning(self, "提示", "请先选择一个产品")
+            return
+        name = current.text()
+        dialog = ProductConfigDialog(self, mode="edit", product_name=name)
+        if dialog.exec_() == QDialog.Accepted:
+            self._refresh_product_list()
+            if self._inspection_panel is not None:
+                self._inspection_panel.refresh_products()
+
+    def _on_delete_product(self):
+        """删除产品"""
+        current = self._eng_product_list.currentItem()
+        if current is None:
+            QMessageBox.warning(self, "提示", "请先选择一个产品")
+            return
+        name = current.text()
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除产品「{name}」吗？\n此操作不可恢复！",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            from core.product_manager import delete_product
+            if delete_product(name):
+                self._refresh_product_list()
+                if self._inspection_panel is not None:
+                    self._inspection_panel.refresh_products()
+                log_info(f"已删除产品: {name}")
+            else:
+                QMessageBox.critical(self, "错误", f"删除产品「{name}」失败")
+
+    # ──────────────── 轴控制标签页 ────────────────
+
+    def _build_axis_control_tab(self):
+        """构建轴控制标签页（工程师调试用）"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        # ── 轴控制主分组 ──
+        axis_group = QGroupBox("轴控制")
+        axis_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold; font-size: 14px; border: 1px solid #444;
+                border-radius: 4px; margin-top: 8px; padding-top: 14px; color: #d4d4d4;
+            }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
+        """)
+        axis_layout = QVBoxLayout(axis_group)
+        axis_layout.setSpacing(6)
+
+        # 轴选择行
+        axis_sel_layout = QHBoxLayout()
+        axis_sel_layout.addWidget(QLabel("轴:"))
+        self._eng_axis_combo = QComboBox()
+        self._eng_axis_combo.addItems(["Axis_1", "Axis_2", "Axis_3", "Axis_4"])
+        self._eng_axis_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        axis_sel_layout.addWidget(self._eng_axis_combo)
+        axis_sel_layout.addStretch()
+        axis_layout.addLayout(axis_sel_layout)
+
+        # 实时状态显示（命令位置、编码器、速度、轴状态）
+        status_grid = QGridLayout()
+        status_grid.setSpacing(4)
+
+        status_grid.addWidget(QLabel("命令位置:"), 0, 0)
+        self._eng_axis_pos_label = QLabel("--")
+        self._eng_axis_pos_label.setStyleSheet("""
+            font-size: 16px; font-weight: bold; color: #4fc3f7;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 3px; padding: 2px 8px;
+        """)
+        status_grid.addWidget(self._eng_axis_pos_label, 0, 1)
+
+        status_grid.addWidget(QLabel("编码器:"), 0, 2)
+        self._eng_axis_enc_label = QLabel("--")
+        self._eng_axis_enc_label.setStyleSheet("""
+            font-size: 16px; font-weight: bold; color: #ff9800;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 3px; padding: 2px 8px;
+        """)
+        status_grid.addWidget(self._eng_axis_enc_label, 0, 3)
+
+        status_grid.addWidget(QLabel("速度:"), 1, 0)
+        self._eng_axis_vel_label = QLabel("--")
+        self._eng_axis_vel_label.setStyleSheet("""
+            font-size: 14px; color: #d4d4d4;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 3px; padding: 2px 8px;
+        """)
+        status_grid.addWidget(self._eng_axis_vel_label, 1, 1)
+
+        status_grid.addWidget(QLabel("轴状态:"), 1, 2)
+        self._eng_axis_state_label = QLabel("--")
+        self._eng_axis_state_label.setStyleSheet("""
+            font-size: 14px; font-weight: bold; color: #d4d4d4;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 3px; padding: 2px 8px;
+        """)
+        status_grid.addWidget(self._eng_axis_state_label, 1, 3)
+
+        axis_layout.addLayout(status_grid)
+
+        # 速度/目标设置
+        param_layout = QHBoxLayout()
+        param_layout.setSpacing(8)
+        param_layout.addWidget(QLabel("速度:"))
+        self._eng_axis_speed = QLineEdit("50000")
+        self._eng_axis_speed.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        self._eng_axis_speed.setFixedWidth(80)
+        param_layout.addWidget(self._eng_axis_speed)
+        param_layout.addWidget(QLabel("加速度:"))
+        self._eng_axis_acc = QLineEdit("100000")
+        self._eng_axis_acc.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        self._eng_axis_acc.setFixedWidth(80)
+        param_layout.addWidget(self._eng_axis_acc)
+        param_layout.addWidget(QLabel("目标位置:"))
+        self._eng_axis_target = QLineEdit("0")
+        self._eng_axis_target.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        self._eng_axis_target.setFixedWidth(80)
+        param_layout.addStretch()
+        axis_layout.addLayout(param_layout)
+
+        # ── 位置移动行（输入位置并移动到指定位置）──
+        move_layout = QHBoxLayout()
+        move_layout.setSpacing(8)
+        move_layout.addWidget(QLabel("移动到位置:"))
+        self._eng_axis_move_pos = QLineEdit("0")
+        self._eng_axis_move_pos.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        self._eng_axis_move_pos.setFixedWidth(100)
+        move_layout.addWidget(self._eng_axis_move_pos)
+
+        self._eng_btn_move_to = QPushButton("移动到")
+        self._eng_btn_move_to.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0; color: #fff;
+                padding: 6px 16px; border: 1px solid #1976D2;
+                border-radius: 3px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1976D2; }
+        """)
+        move_layout.addWidget(self._eng_btn_move_to)
+        move_layout.addStretch()
+        axis_layout.addLayout(move_layout)
+
+        # 控制按钮行
+        ctrl_layout = QHBoxLayout()
+        ctrl_layout.setSpacing(6)
+
+        self._eng_btn_jog_plus = QPushButton("JOG +")
+        self._eng_btn_jog_plus.setStyleSheet("""
+            QPushButton {
+                background-color: #2E7D32; color: #fff;
+                padding: 6px 12px; border: 1px solid #4CAF50;
+                border-radius: 3px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #388E3C; }
+            QPushButton:pressed { background-color: #1B5E20; }
+        """)
+
+        self._eng_btn_jog_minus = QPushButton("JOG -")
+        self._eng_btn_jog_minus.setStyleSheet("""
+            QPushButton {
+                background-color: #C62828; color: #fff;
+                padding: 6px 12px; border: 1px solid #EF5350;
+                border-radius: 3px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #D32F2F; }
+            QPushButton:pressed { background-color: #B71C1C; }
+        """)
+
+        self._eng_btn_stop_axis = QPushButton("停止")
+        self._eng_btn_stop_axis.setStyleSheet("""
+            QPushButton {
+                background-color: #E65100; color: #fff;
+                padding: 6px 12px; border: 1px solid #FF6D00;
+                border-radius: 3px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #BF360C; }
+        """)
+
+        self._eng_btn_read_pos = QPushButton("读取位置")
+        self._eng_btn_read_pos.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4;
+                padding: 6px 12px; border: 1px solid #555;
+                border-radius: 3px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+        """)
+
+        ctrl_layout.addWidget(self._eng_btn_jog_plus)
+        ctrl_layout.addWidget(self._eng_btn_jog_minus)
+        ctrl_layout.addWidget(self._eng_btn_stop_axis)
+        ctrl_layout.addWidget(self._eng_btn_read_pos)
+        axis_layout.addLayout(ctrl_layout)
+
+        layout.addWidget(axis_group)
+
+        # ── 回零控制分组 ──
+        home_group = QGroupBox("回零控制")
+        home_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold; font-size: 14px; border: 1px solid #444;
+                border-radius: 4px; margin-top: 8px; padding-top: 14px; color: #d4d4d4;
+            }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
+        """)
+        home_layout = QVBoxLayout(home_group)
+        home_layout.setSpacing(6)
+
+        # 回零参数行
+        home_param_layout = QHBoxLayout()
+        home_param_layout.setSpacing(8)
+        home_param_layout.addWidget(QLabel("搜索速度:"))
+        self._eng_home_speed = QLineEdit("50000")
+        self._eng_home_speed.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        self._eng_home_speed.setFixedWidth(80)
+        home_param_layout.addWidget(self._eng_home_speed)
+        home_param_layout.addWidget(QLabel("加速度:"))
+        self._eng_home_acc = QLineEdit("50000")
+        self._eng_home_acc.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+            }
+        """)
+        self._eng_home_acc.setFixedWidth(80)
+        home_param_layout.addWidget(self._eng_home_acc)
+        home_param_layout.addStretch()
+        home_layout.addLayout(home_param_layout)
+
+        # 回零状态显示
+        home_status_layout = QHBoxLayout()
+        home_status_layout.addWidget(QLabel("回零状态:"))
+        self._eng_home_state_label = QLabel("就绪")
+        self._eng_home_state_label.setStyleSheet("""
+            font-size: 14px; font-weight: bold; color: #d4d4d4;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 3px; padding: 2px 8px;
+        """)
+        home_status_layout.addWidget(self._eng_home_state_label, 1)
+        home_layout.addLayout(home_status_layout)
+
+        # 回零进度条
+        self._eng_home_progress = QProgressBar()
+        self._eng_home_progress.setRange(0, 100)
+        self._eng_home_progress.setValue(0)
+        self._eng_home_progress.setTextVisible(True)
+        self._eng_home_progress.setStyleSheet("""
+            QProgressBar {
+                background-color: #1e1e1e; border: 1px solid #444;
+                border-radius: 3px; text-align: center; color: #d4d4d4;
+                height: 18px;
+            }
+            QProgressBar::chunk {
+                background-color: #4caf50; border-radius: 2px;
+            }
+        """)
+        home_layout.addWidget(self._eng_home_progress)
+
+        # 回零按钮行
+        home_btn_layout = QHBoxLayout()
+        home_btn_layout.setSpacing(6)
+
+        self._eng_btn_home_start = QPushButton("开始回零")
+        self._eng_btn_home_start.setStyleSheet("""
+            QPushButton {
+                background-color: #1a3a5c; color: #4A90D9;
+                padding: 6px 16px; border: 1px solid #2a5a8c;
+                border-radius: 3px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #2a4a7c; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
+        """)
+
+        self._eng_btn_home_stop = QPushButton("停止回零")
+        self._eng_btn_home_stop.setEnabled(False)
+        self._eng_btn_home_stop.setStyleSheet("""
+            QPushButton {
+                background-color: #E65100; color: #fff;
+                padding: 6px 16px; border: 1px solid #FF6D00;
+                border-radius: 3px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #BF360C; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
+        """)
+
+        self._eng_btn_home_set_zero = QPushButton("设为零点")
+        self._eng_btn_home_set_zero.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4;
+                padding: 6px 16px; border: 1px solid #555;
+                border-radius: 3px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+        """)
+
+        home_btn_layout.addWidget(self._eng_btn_home_start)
+        home_btn_layout.addWidget(self._eng_btn_home_stop)
+        home_btn_layout.addWidget(self._eng_btn_home_set_zero)
+        home_btn_layout.addStretch()
+        home_layout.addLayout(home_btn_layout)
+
+        layout.addWidget(home_group)
+
+        layout.addStretch()
+
+        # ── 连接信号 ──
+        self._eng_btn_move_to.clicked.connect(self._on_eng_axis_move_to)
+        # JOG 使用 pressed/released 实现按压-保持行为
+        self._eng_btn_jog_plus.pressed.connect(self._on_eng_axis_jog_plus)
+        self._eng_btn_jog_plus.released.connect(self._on_eng_axis_jog_stop)
+        self._eng_btn_jog_minus.pressed.connect(self._on_eng_axis_jog_minus)
+        self._eng_btn_jog_minus.released.connect(self._on_eng_axis_jog_stop)
+        self._eng_btn_stop_axis.clicked.connect(self._on_eng_axis_stop)
+        self._eng_btn_read_pos.clicked.connect(self._on_eng_axis_read_pos)
+
+        # 回零按钮信号
+        self._eng_btn_home_start.clicked.connect(self._on_eng_home_start)
+        self._eng_btn_home_stop.clicked.connect(self._on_eng_home_stop)
+        self._eng_btn_home_set_zero.clicked.connect(self._on_eng_home_set_zero)
+
+        # ── 实时监控定时器 (200ms) ──
+        self._eng_axis_timer = QTimer(self)
+        self._eng_axis_timer.timeout.connect(self._on_eng_axis_timer_tick)
+        self._eng_axis_timer.start(200)
+
+        # ── 回零状态变量 ──
+        self._eng_homing = False
+        self._eng_home_phase = 0
+        self._eng_home_speed_level = 0
+        self._eng_home_axis = 0
+        self._eng_home_search_negative = True
+        self._eng_home_has_reversed = False
+
+        self.eng_right_tabs.addTab(tab, "🎮 轴控制")
+
+    # ── 轴控制操作 ──
+
+    def _get_axis_index(self) -> int:
+        """获取当前选择的轴索引（0-based）"""
+        return self._eng_axis_combo.currentIndex()
+
+    def _on_eng_axis_move_to(self):
+        """移动到指定位置（使用位置输入框的值）"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            QMessageBox.warning(self, "提示", "NMC 控制卡未连接")
+            return
+        try:
+            target_text = self._eng_axis_move_pos.text().strip()
+            if not target_text:
+                QMessageBox.warning(self, "提示", "请输入目标位置")
+                return
+            target = int(target_text)
+            speed = float(self._eng_axis_speed.text().strip())
+            acc = float(self._eng_axis_acc.text().strip())
+            axis = self._get_axis_index()
+
+            from core.nmc_sdk import Profile_S, Position_Absolute
+
+            # 读取当前位置
+            try:
+                current_pos = self._nmc_sdk.get_position(axis)
+            except Exception:
+                current_pos = 0
+            log_info(f"轴{axis + 1} 当前位置: {current_pos}, 目标: {target}")
+
+            # 1) 确保轴已使能
+            try:
+                self._nmc_sdk.set_servo_enable(axis, 1)
+            except Exception as e:
+                log_warning(f"轴{axis + 1} 使能失败(可忽略): {e}")
+
+            # 2) 清除轴状态
+            try:
+                self._nmc_sdk.clear_axis_state(axis)
+            except Exception:
+                pass
+
+            # 3) 检查轴当前状态
+            try:
+                axis_state = self._nmc_sdk.get_axis_state(axis)
+                if axis_state != 0:
+                    log_warning(f"轴{axis + 1} 当前状态: {axis_state}，尝试清除")
+                    self._nmc_sdk.clear_axis_state(axis)
+                    import time
+                    time.sleep(0.1)
+            except Exception:
+                pass
+
+            # 4) 设置曲线参数
+            ret_profile = self._nmc_sdk.set_axis_profile(axis, 1000, speed, acc, acc, 0, Profile_S)
+            log_info(f"轴{axis + 1} set_axis_profile 返回值: {ret_profile}")
+
+            # 5) 使用相对定位模式（从当前位置移动差值）
+            diff = target - current_pos
+            log_info(f"轴{axis + 1} 尝试相对移动: dist={diff} (目标{target} - 当前位置{current_pos})")
+            # 使用 uniaxial_long（独立 c_long 句柄），避免 argtypes(c_double) 冲突
+            ret_move = self._nmc_sdk.uniaxial_long(axis, diff, 1)  # 相对模式
+            log_info(f"轴{axis + 1} uniaxial_long(相对, dist={diff}) 返回值: {ret_move}")
+
+            if ret_move != 0:
+                log_error(f"轴{axis + 1} 相对移动 {diff} 失败，返回值: {ret_move}")
+                QMessageBox.warning(self, "移动失败", f"轴移动失败，错误码: {ret_move}")
+            else:
+                # 等待运动完成（最多等待 5 秒）
+                import time
+                wait_start = time.time()
+                moved = False
+                poll_count = 0
+                while time.time() - wait_start < 5.0:
+                    try:
+                        state = self._nmc_sdk.get_axis_state(axis)
+                        poll_count += 1
+                        if poll_count <= 3 or (poll_count % 20 == 0):
+                            log_info(f"轴{axis + 1} 轮询状态: state={state} (第{poll_count}次)")
+                        if state == 0:  # 空闲 = 到位
+                            moved = True
+                            break
+                        elif state > 1:  # 非空闲非执行中 = 停止（可能因限位/报警停止）
+                            log_warning(f"轴{axis + 1} 运动停止，状态码: {state}")
+                            break
+                    except Exception as e:
+                        log_warning(f"轴{axis + 1} 读取状态异常: {e}")
+                    time.sleep(0.05)
+
+                if not moved:
+                    log_warning(f"轴{axis + 1} 等待运动完成超时 (共轮询{poll_count}次)")
+
+                # 读取移动后的位置
+                try:
+                    pos_after = self._nmc_sdk.get_position(axis)
+                    log_info(f"轴{axis + 1} 移动后位置: {pos_after}")
+                except Exception:
+                    pos_after = "?"
+
+                log_info(f"轴{axis + 1} 相对移动 {diff} (速度: {speed}, 加速度: {acc}, 移动后:{pos_after})")
+        except ValueError:
+            QMessageBox.warning(self, "提示", "请输入有效的数值")
+        except Exception as e:
+            log_error(f"轴移动失败: {e}")
+
+    def _on_eng_axis_jog_plus(self):
+        """JOG 正向移动（按压触发）"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            return
+        try:
+            speed = float(self._eng_axis_speed.text())
+            acc = float(self._eng_axis_acc.text())
+            axis = self._get_axis_index()
+            self._nmc_sdk.jog(axis, speed, acc)
+            log_info(f"轴{axis + 1} JOG+ (速度: {speed})")
+        except ValueError:
+            pass
+        except Exception as e:
+            log_error(f"JOG+ 失败: {e}")
+
+    def _on_eng_axis_jog_minus(self):
+        """JOG 反向移动（按压触发）"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            return
+        try:
+            speed = float(self._eng_axis_speed.text())
+            acc = float(self._eng_axis_acc.text())
+            axis = self._get_axis_index()
+            self._nmc_sdk.jog(axis, -speed, acc)
+            log_info(f"轴{axis + 1} JOG- (速度: {speed})")
+        except ValueError:
+            pass
+        except Exception as e:
+            log_error(f"JOG- 失败: {e}")
+
+    def _on_eng_axis_jog_stop(self):
+        """JOG 停止（释放按钮触发）"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            return
+        try:
+            axis = self._get_axis_index()
+            self._nmc_sdk.axis_stop(axis, Stop_Smooth)
+            log_info(f"轴{axis + 1} JOG 停止")
+        except Exception as e:
+            log_error(f"JOG 停止失败: {e}")
+
+    def _on_eng_axis_stop(self):
+        """停止轴"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            return
+        try:
+            axis = self._get_axis_index()
+            self._nmc_sdk.axis_stop(axis, Stop_Smooth)
+            log_info(f"轴{axis + 1} 已停止")
+        except Exception as e:
+            log_error(f"停止轴失败: {e}")
+
+    def _on_eng_axis_read_pos(self):
+        """读取当前位置"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            QMessageBox.warning(self, "提示", "NMC 控制卡未连接")
+            return
+        try:
+            axis = self._get_axis_index()
+            pos = self._nmc_sdk.get_position(axis)
+            self._eng_axis_pos_label.setText(str(pos))
+            log_info(f"轴{axis + 1} 当前位置: {pos}")
+        except Exception as e:
+            log_error(f"读取位置失败: {e}")
+
+    # ── 实时监控定时器 ──
+
+    def _on_eng_axis_timer_tick(self):
+        """定时刷新轴状态显示（200ms）"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            return
+        try:
+            axis = self._get_axis_index()
+
+            # 读取命令位置
+            pos = self._nmc_sdk.get_position(axis)
+            self._eng_axis_pos_label.setText(str(pos))
+
+            # 读取编码器位置
+            try:
+                enc = self._nmc_sdk.get_encoder(axis)
+                self._eng_axis_enc_label.setText(str(enc))
+            except Exception:
+                self._eng_axis_enc_label.setText("--")
+
+            # 读取速度
+            try:
+                vel = self._nmc_sdk.get_velocity(axis)
+                if isinstance(vel, (tuple, list)):
+                    vel_str = f"{vel[0]:.1f}"
+                else:
+                    vel_str = f"{float(vel):.1f}"
+                self._eng_axis_vel_label.setText(vel_str)
+            except Exception:
+                self._eng_axis_vel_label.setText("--")
+
+            # 读取轴状态
+            try:
+                state = self._nmc_sdk.get_axis_state(axis)
+                state_texts = {0: "停止", 1: "运动中", 2: "暂停"}
+                state_str = state_texts.get(state, f"未知({state})")
+                self._eng_axis_state_label.setText(state_str)
+                # 根据状态设置颜色
+                if state == 1:
+                    self._eng_axis_state_label.setStyleSheet("""
+                        font-size: 14px; font-weight: bold; color: #4caf50;
+                        background-color: #1e1e1e; border: 1px solid #444;
+                        border-radius: 3px; padding: 2px 8px;
+                    """)
+                else:
+                    self._eng_axis_state_label.setStyleSheet("""
+                        font-size: 14px; font-weight: bold; color: #d4d4d4;
+                        background-color: #1e1e1e; border: 1px solid #444;
+                        border-radius: 3px; padding: 2px 8px;
+                    """)
+            except Exception:
+                self._eng_axis_state_label.setText("--")
+
+        except Exception:
+            pass
+
+    # ── 回零控制 ──
+
+    def _on_eng_home_start(self):
+        """开始回零 - 双向搜索原点信号（三阶段速度控制）"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            QMessageBox.warning(self, "提示", "NMC 控制卡未连接")
+            return
+
+        axis = self._get_axis_index()
+
+        # 如果正在回零，先停止
+        if self._eng_homing:
+            self._on_eng_home_stop()
+
+        try:
+            low_speed = int(self._eng_home_speed.text())
+            acc = int(self._eng_home_acc.text())
+
+            # 读取当前位置
+            current_pos = self._nmc_sdk.get_position(axis)
+            log_info(f"轴{axis + 1} 当前位置: {current_pos}")
+
+            # 读取原点信号状态 (0=OFF=检测到, 1=ON=未检测到)
+            home_signal = self._nmc_sdk.get_home(axis)
+            home_detected = (home_signal == 0)
+            log_info(f"轴{axis + 1} 原点信号: {'检测到(OFF)' if home_detected else '未检测到(ON)'}")
+
+            # 设置软限位（确保限位保护生效）
+            if axis in (0, 1, 2):
+                pos_limit = 2000
+                neg_limit = -60000
+            else:
+                pos_limit = 1000000
+                neg_limit = -1000000
+
+            log_info(f"轴{axis + 1} 设置软限位: +{pos_limit}, {neg_limit}")
+            self._nmc_sdk.set_soft_limit(axis, pos_limit, neg_limit)
+            self._nmc_sdk.set_soft_limit_enable(axis, 1)
+
+            # 如果已经检测到原点信号，先向负方向离开原点
+            if home_detected:
+                log_info(f"轴{axis + 1} 已在原点位置，向负方向离开再回零")
+                self._nmc_sdk.jog(axis, float(-low_speed), float(acc))
+                # 等待原点信号消失（最多等待 3 秒）
+                wait_start = time.time()
+                while time.time() - wait_start < 3.0:
+                    sig = self._nmc_sdk.get_home(axis)
+                    if sig != 0:
+                        break
+                    time.sleep(0.05)
+                self._nmc_sdk.axis_stop(axis, Stop_Abrupt)
+                time.sleep(0.2)
+                self._nmc_sdk.clear_axis_state(axis)
+                # 再向负方向多走一点
+                self._nmc_sdk.jog(axis, float(-low_speed), float(acc))
+                time.sleep(0.2)
+                self._nmc_sdk.axis_stop(axis, Stop_Abrupt)
+                time.sleep(0.2)
+                self._nmc_sdk.clear_axis_state(axis)
+
+            # 根据是否离开过原点决定搜索方向
+            if home_detected:
+                # 已离开原点，向正方向搜索
+                log_info(f"轴{axis + 1} 开始回零: 向正方向搜索原点")
+                self._nmc_sdk.jog(axis, float(low_speed), float(acc))
+                self._eng_home_search_negative = False
+            else:
+                # 正常情况，向负方向搜索
+                log_info(f"轴{axis + 1} 开始回零: 向负方向搜索原点")
+                self._nmc_sdk.jog(axis, float(-low_speed), float(acc))
+                self._eng_home_search_negative = True
+
+            # 回零状态机初始化
+            self._eng_home_phase = 1
+            self._eng_home_speed_level = 0
+            self._eng_home_has_reversed = False
+            self._eng_homing = True
+            self._eng_home_axis = axis
+
+            # 更新UI
+            direction = "负方向" if self._eng_home_search_negative else "正方向"
+            self._eng_home_state_label.setText(f"正在搜索原点 ({direction})...")
+            self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+            self._eng_btn_home_start.setEnabled(False)
+            self._eng_btn_home_stop.setEnabled(True)
+            self._eng_home_progress.setValue(0)
+
+            # 启动回零监测定时器 (100ms)
+            self._eng_home_timer = QTimer(self)
+            self._eng_home_timer.timeout.connect(self._on_eng_home_monitor_tick)
+            self._eng_home_timer.start(100)
+            log_info(f"轴{axis + 1} 回零开始")
+
+        except ValueError:
+            QMessageBox.warning(self, "提示", "请输入有效的回零参数")
+        except Exception as e:
+            log_error(f"回零启动失败: {e}")
+            QMessageBox.critical(self, "回零错误", f"启动回零失败: {e}")
+
+    def _on_eng_home_stop(self):
+        """停止回零运动"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            return
+        try:
+            axis = self._get_axis_index()
+            self._nmc_sdk.axis_stop(axis, Stop_Smooth)
+            if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                self._eng_home_timer.stop()
+                self._eng_home_timer = None
+            self._eng_btn_home_start.setEnabled(True)
+            self._eng_btn_home_stop.setEnabled(False)
+            self._eng_home_phase = 0
+            self._eng_home_speed_level = 0
+            self._eng_homing = False
+            pos = self._nmc_sdk.get_position(axis)
+            self._eng_home_state_label.setText("已手动停止")
+            self._eng_home_state_label.setStyleSheet("color: #f44336;")
+            self._eng_home_progress.setValue(0)
+            log_info(f"轴{axis + 1} 回零已手动停止，位置: {pos}")
+        except Exception as e:
+            log_error(f"停止回零失败: {e}")
+
+    def _on_eng_home_set_zero(self):
+        """将当前位置设为零点"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            QMessageBox.warning(self, "提示", "NMC 控制卡未连接")
+            return
+        try:
+            axis = self._get_axis_index()
+            pos = self._nmc_sdk.get_position(axis)
+            self._nmc_sdk.set_position(axis, 0)
+            self._nmc_sdk.set_encoder(axis, 0)
+            self._eng_home_state_label.setText(f"已设为零点 (原位置: {pos})")
+            self._eng_home_state_label.setStyleSheet("color: #4caf50; font-weight: bold;")
+            log_info(f"轴{axis + 1} 当前位置 {pos} 已设为零点")
+        except Exception as e:
+            log_error(f"设为零点失败: {e}")
+
+    def _on_eng_home_monitor_tick(self):
+        """回零监测定时器 - 三阶段速度控制"""
+        if self._nmc_sdk is None or not self._nmc_sdk.is_open():
+            if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                self._eng_home_timer.stop()
+                self._eng_home_timer = None
+            self._eng_btn_home_start.setEnabled(True)
+            self._eng_btn_home_stop.setEnabled(False)
+            return
+        try:
+            axis = self._eng_home_axis
+            low_speed = int(self._eng_home_speed.text())
+            acc = int(self._eng_home_acc.text())
+
+            # 读取当前位置
+            pos = self._nmc_sdk.get_position(axis)
+
+            # 读取原点信号状态 (0=OFF=检测到, 1=ON=未检测到)
+            home_signal = self._nmc_sdk.get_home(axis)
+            home_detected = (home_signal == 0)
+
+            # 读取轴状态
+            axis_state = self._nmc_sdk.get_axis_state(axis)
+            is_moving = (axis_state == 1)
+
+            HIGH_ACC = 100000
+
+            # ============================================================
+            # 阶段3：精定位阶段（反向极低速寻找原点边缘）
+            # ============================================================
+            if self._eng_home_phase == 3:
+                if home_detected:
+                    log_info(f"轴{axis + 1} 阶段3: 检测到原点信号! 停止轴并设为零点")
+                    self._nmc_sdk.jog(axis, 0.0, float(HIGH_ACC))
+                    time.sleep(0.3)
+
+                    if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                        self._eng_home_timer.stop()
+                        self._eng_home_timer = None
+                    self._eng_btn_home_start.setEnabled(True)
+                    self._eng_btn_home_stop.setEnabled(False)
+
+                    stop_pos = self._nmc_sdk.get_position(axis)
+                    try:
+                        self._nmc_sdk.set_position(axis, 0)
+                        self._nmc_sdk.set_encoder(axis, 0)
+                        log_info(f"轴{axis + 1} 已将原点边缘位置 {stop_pos} 设为0点")
+                    except Exception as e:
+                        log_error(f"轴{axis + 1} 设为零点失败: {e}")
+
+                    self._eng_home_state_label.setText(f"轴{axis + 1} 回零完成 ✓")
+                    self._eng_home_state_label.setStyleSheet("color: #4caf50; font-weight: bold;")
+                    self._eng_home_progress.setValue(100)
+                    log_info(f"轴{axis + 1} 回零成功! 原点边缘位置: {stop_pos} → 已设为0点")
+                    self._eng_homing = False
+                    self._eng_home_phase = 0
+                    self._eng_home_speed_level = 0
+                    return
+
+                # 轴停止（碰到限位）→ 回零失败
+                if not is_moving:
+                    if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                        self._eng_home_timer.stop()
+                        self._eng_home_timer = None
+                    self._eng_btn_home_start.setEnabled(True)
+                    self._eng_btn_home_stop.setEnabled(False)
+                    self._eng_home_state_label.setText(f"轴{axis + 1} 回零失败 ✗")
+                    self._eng_home_state_label.setStyleSheet("color: #f44336; font-weight: bold;")
+                    self._eng_home_progress.setValue(0)
+                    log_error(f"轴{axis + 1} 回零失败: 精定位阶段轴停止 (state={axis_state})")
+                    self._eng_homing = False
+                    self._eng_home_phase = 0
+                    self._eng_home_speed_level = 0
+                    return
+
+                self._eng_home_state_label.setText("回零状态: 精定位中，等待原点信号...")
+                self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+                return
+
+            # ============================================================
+            # 阶段2：减速逼近阶段（保持原方向，逐步降速）
+            # ============================================================
+            if self._eng_home_phase == 2:
+                speed_levels = [
+                    low_speed,
+                    max(low_speed // 5, 1),
+                    max(low_speed // 10, 1),
+                    max(low_speed // 20, 1),
+                ]
+
+                # 先检查轴是否已停止
+                if not is_moving:
+                    if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                        self._eng_home_timer.stop()
+                        self._eng_home_timer = None
+                    self._eng_btn_home_start.setEnabled(True)
+                    self._eng_btn_home_stop.setEnabled(False)
+                    self._eng_home_state_label.setText(f"轴{axis + 1} 回零失败 ✗")
+                    self._eng_home_state_label.setStyleSheet("color: #f44336; font-weight: bold;")
+                    self._eng_home_progress.setValue(0)
+                    log_error(f"轴{axis + 1} 回零失败: 减速逼近阶段轴停止 (state={axis_state})")
+                    self._eng_homing = False
+                    self._eng_home_phase = 0
+                    self._eng_home_speed_level = 0
+                    return
+
+                # 原点信号已消失 → 进入阶段3
+                if not home_detected:
+                    log_info(f"轴{axis + 1} 阶段2: 原点信号消失! 进入精定位阶段")
+                    self._eng_home_phase = 3
+                    self._eng_home_speed_level = 0
+                    creep_direction = -1 if self._eng_home_search_negative else 1
+                    creep_speed = max(low_speed // 50, 10)
+                    self._nmc_sdk.jog(axis, float(creep_direction * creep_speed), float(HIGH_ACC))
+                    log_info(f"轴{axis + 1} 阶段3: 反向精定位 speed={creep_speed}")
+                    self._eng_home_state_label.setText("回零状态: 精定位中...")
+                    self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+                    return
+
+                # 原点信号仍在 → 逐步降速
+                if self._eng_home_speed_level < len(speed_levels) - 1:
+                    self._eng_home_speed_level += 1
+                    new_speed = speed_levels[self._eng_home_speed_level]
+                    direction = 1 if self._eng_home_search_negative else -1
+                    log_info(f"轴{axis + 1} 阶段2: 降速到 level={self._eng_home_speed_level}, speed={new_speed}")
+                    self._nmc_sdk.jog(axis, float(direction * new_speed), float(HIGH_ACC))
+                    self._eng_home_state_label.setText(f"回零状态: 减速逼近 ({self._eng_home_speed_level}/3)...")
+                    self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+                    return
+                else:
+                    self._eng_home_state_label.setText("回零状态: 最低速逼近中，等待信号消失...")
+                    self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+                    return
+
+            # ============================================================
+            # 阶段1：搜索阶段
+            # ============================================================
+
+            # 检测到原点信号 → 进入阶段2
+            if home_detected:
+                log_info(f"轴{axis + 1} 阶段1: 检测到原点信号! 进入减速逼近阶段")
+                self._eng_home_phase = 2
+                self._eng_home_speed_level = 1
+                new_speed = max(low_speed // 5, 1)
+                direction = 1 if self._eng_home_search_negative else -1
+                self._nmc_sdk.jog(axis, float(direction * new_speed), float(HIGH_ACC))
+                log_info(f"轴{axis + 1} 阶段2: 降速到 {new_speed}")
+                self._eng_home_state_label.setText("回零状态: 减速逼近 (1/3)...")
+                self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+                return
+
+            # 轴仍在运动中
+            if is_moving:
+                direction = "负方向" if self._eng_home_search_negative else "正方向"
+                self._eng_home_state_label.setText(f"回零状态: 搜索原点 ({direction})...")
+                self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+                return
+
+            # 轴已停止（碰到限位）
+            log_info(f"轴{axis + 1} 轴停止: state={axis_state}，位置: {pos}")
+            self._nmc_sdk.clear_axis_state(axis)
+            time.sleep(0.05)
+
+            # 如果已经反向过一次 → 回零失败
+            if self._eng_home_has_reversed:
+                if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                    self._eng_home_timer.stop()
+                    self._eng_home_timer = None
+                self._eng_btn_home_start.setEnabled(True)
+                self._eng_btn_home_stop.setEnabled(False)
+                self._eng_home_state_label.setText(f"轴{axis + 1} 回零失败 ✗")
+                self._eng_home_state_label.setStyleSheet("color: #f44336; font-weight: bold;")
+                self._eng_home_progress.setValue(0)
+                log_error(f"轴{axis + 1} 回零失败: 两个方向均未找到原点信号")
+                self._eng_homing = False
+                self._eng_home_phase = 0
+                return
+
+            # 切换方向继续搜索
+            self._eng_home_has_reversed = True
+            self._eng_home_search_negative = not self._eng_home_search_negative
+            self._nmc_sdk.set_soft_limit_enable(axis, 1)
+            time.sleep(0.02)
+
+            if self._eng_home_search_negative:
+                log_info(f"轴{axis + 1} 碰到正限位，切换向负方向搜索")
+                self._nmc_sdk.jog(axis, float(-low_speed), float(acc))
+                self._eng_home_state_label.setText("回零状态: 搜索原点 (负方向)...")
+            else:
+                log_info(f"轴{axis + 1} 碰到负限位，切换向正方向搜索")
+                self._nmc_sdk.jog(axis, float(low_speed), float(acc))
+                self._eng_home_state_label.setText("回零状态: 搜索原点 (正方向)...")
+
+            self._eng_home_state_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+
+        except Exception as e:
+            log_error(f"回零监测异常: {e}")
 
     def _setup_menu_bar(self):
         menubar = self.menuBar()
@@ -1543,20 +2666,17 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "请先选择并应用一个方案")
             return
 
-        # 如果没有图像，先拍照
-        if self._raw_image is None:
-            if self._camera_panel is None or not self._camera_panel.is_camera_open():
-                QMessageBox.warning(self, "提示", "请先打开相机")
-                return
-            self._pending_engineer_test = True
-            self.eng_btn_run_preview.setEnabled(False)
-            self.eng_btn_run_preview.setText("拍照中...")
-            self.status_label.setText("正在拍照...")
-            QApplication.processEvents()
-            self._capture()
+        # 每次点击测试按钮都重新拍照获取新图像
+        if self._camera_panel is None or not self._camera_panel.is_camera_open():
+            QMessageBox.warning(self, "提示", "请先打开相机")
             return
 
-        self._execute_engineer_test()
+        self._pending_engineer_test = True
+        self.eng_btn_run_preview.setEnabled(False)
+        self.eng_btn_run_preview.setText("拍照中...")
+        self.status_label.setText("正在拍照...")
+        QApplication.processEvents()
+        self._capture()
 
     def _execute_engineer_test(self):
         """执行设计模式流水线测试（内部方法，_raw_image 必须非空）"""
@@ -2134,6 +3254,24 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         log_info("系统关闭")
+        # 停止轴监控定时器
+        try:
+            if hasattr(self, '_eng_axis_timer') and self._eng_axis_timer is not None:
+                self._eng_axis_timer.stop()
+                self._eng_axis_timer = None
+        except Exception:
+            pass
+        # 停止回零定时器
+        try:
+            if hasattr(self, '_eng_home_timer') and self._eng_home_timer is not None:
+                self._eng_home_timer.stop()
+                self._eng_home_timer = None
+        except Exception:
+            pass
+        # 停止自动化检测工作流
+        if self._inspection_workflow is not None:
+            self._inspection_workflow.cleanup()
+            self._inspection_workflow = None
         # 停止自动测试工作流
         if self._serial_workflow is not None:
             self._serial_workflow.stop()
@@ -2159,3 +3297,315 @@ class MainWindow(QMainWindow):
             pass
         CameraManager.finalize_sdk()
         event.accept()
+
+
+# ============================================================================
+# 产品配置编辑对话框
+# ============================================================================
+
+class ProductConfigDialog(QDialog):
+    """产品配置编辑对话框，用于新建/编辑产品配置"""
+
+    def __init__(self, parent=None, mode="new", product_name=None):
+        """
+        Args:
+            parent: 父窗口
+            mode: "new" 新建 / "edit" 编辑
+            product_name: 编辑模式下的产品名称
+        """
+        super().__init__(parent)
+        self._mode = mode
+        self._product_name = product_name
+        self._config = None
+
+        self.setWindowTitle("新建产品配置" if mode == "new" else f"编辑产品 - {product_name}")
+        self.setMinimumSize(800, 700)
+        self.resize(900, 750)
+        self.setStyleSheet("""
+            QDialog { background-color: #2d2d2d; }
+            QLabel { color: #d4d4d4; font-size: 13px; }
+            QLineEdit, QSpinBox, QDoubleSpinBox {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; border-radius: 3px;
+                padding: 4px 8px;
+            }
+            QGroupBox {
+                font-weight: bold; font-size: 14px; border: 1px solid #444;
+                border-radius: 4px; margin-top: 8px; padding-top: 14px; color: #d4d4d4;
+            }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
+            QTableWidget {
+                background-color: #1e1e1e; color: #d4d4d4;
+                border: 1px solid #444; gridline-color: #333;
+            }
+            QTableWidget::item { padding: 4px; }
+            QHeaderView::section {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #444; padding: 4px;
+            }
+        """)
+
+        if mode == "edit" and product_name:
+            from core.product_manager import load_product
+            self._config = load_product(product_name)
+
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+        layout.setContentsMargins(16, 12, 16, 12)
+
+        # ── 基本信息 ──
+        basic_group = QGroupBox("基本信息")
+        basic_layout = QFormLayout(basic_group)
+        basic_layout.setSpacing(6)
+
+        self._edit_name = QLineEdit(self._config.get("name", "") if self._config else "")
+        self._edit_name.setPlaceholderText("输入产品型号名称")
+        basic_layout.addRow("产品名称:", self._edit_name)
+
+        self._edit_desc = QLineEdit(self._config.get("description", "") if self._config else "")
+        self._edit_desc.setPlaceholderText("产品描述（可选）")
+        basic_layout.addRow("描述:", self._edit_desc)
+
+        layout.addWidget(basic_group)
+
+        # ── 相机参数 ──
+        camera_group = QGroupBox("相机参数")
+        camera_layout = QFormLayout(camera_group)
+        camera_layout.setSpacing(6)
+
+        camera = self._config.get("camera", {}) if self._config else {}
+
+        self._edit_exposure = QDoubleSpinBox()
+        self._edit_exposure.setRange(1, 1000000)
+        self._edit_exposure.setValue(camera.get("exposure_time", 18000))
+        self._edit_exposure.setSuffix(" us")
+        camera_layout.addRow("曝光时间:", self._edit_exposure)
+
+        self._edit_gain = QDoubleSpinBox()
+        self._edit_gain.setRange(0, 48)
+        self._edit_gain.setValue(camera.get("gain", 0))
+        self._edit_gain.setSuffix(" dB")
+        camera_layout.addRow("增益:", self._edit_gain)
+
+        layout.addWidget(camera_group)
+
+        # ── 运动参数 ──
+        motion_group = QGroupBox("运动参数")
+        motion_layout = QFormLayout(motion_group)
+        motion_layout.setSpacing(6)
+
+        motion = self._config.get("motion", {}) if self._config else {}
+
+        self._edit_vmax = QDoubleSpinBox()
+        self._edit_vmax.setRange(1, 500000)
+        self._edit_vmax.setValue(motion.get("v_max", 50000))
+        motion_layout.addRow("最大速度:", self._edit_vmax)
+
+        self._edit_origin = QSpinBox()
+        self._edit_origin.setRange(-1000000, 1000000)
+        self._edit_origin.setValue(motion.get("origin_position", 0))
+        motion_layout.addRow("原点位置:", self._edit_origin)
+
+        self._edit_timeout = QSpinBox()
+        self._edit_timeout.setRange(1, 120)
+        self._edit_timeout.setValue(motion.get("move_timeout_s", 10))
+        self._edit_timeout.setSuffix(" 秒")
+        motion_layout.addRow("运动超时:", self._edit_timeout)
+
+        layout.addWidget(motion_group)
+
+        # ── DI 配置 ──
+        di_group = QGroupBox("触发配置")
+        di_layout = QFormLayout(di_group)
+        di_layout.setSpacing(6)
+
+        di_bit = self._config.get("di_bit", 3) if self._config else 3
+        self._edit_di_bit = QSpinBox()
+        self._edit_di_bit.setRange(0, 31)
+        self._edit_di_bit.setValue(di_bit)
+        di_layout.addRow("DI 输入位:", self._edit_di_bit)
+
+        layout.addWidget(di_group)
+
+        # ── 位置列表 ──
+        pos_group = QGroupBox("检测位置")
+        pos_layout = QVBoxLayout(pos_group)
+        pos_layout.setSpacing(4)
+
+        self._pos_table = QTableWidget()
+        self._pos_table.setColumnCount(4)
+        self._pos_table.setHorizontalHeaderLabels(["位置名称", "坐标", "视觉方案", ""])
+        self._pos_table.horizontalHeader().setStretchLastSection(False)
+        self._pos_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self._pos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self._pos_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self._pos_table.setMinimumHeight(150)
+
+        pos_layout.addWidget(self._pos_table, 1)
+
+        pos_btn_layout = QHBoxLayout()
+        self._btn_add_pos = QPushButton("+ 添加位置")
+        self._btn_remove_pos = QPushButton("- 删除选中")
+        for btn in [self._btn_add_pos, self._btn_remove_pos]:
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3c3c3c; color: #d4d4d4;
+                    padding: 4px 12px; border: 1px solid #555;
+                    border-radius: 3px;
+                }
+                QPushButton:hover { background-color: #4a4a4a; }
+            """)
+        pos_btn_layout.addWidget(self._btn_add_pos)
+        pos_btn_layout.addWidget(self._btn_remove_pos)
+        pos_btn_layout.addStretch()
+        pos_layout.addLayout(pos_btn_layout)
+
+        layout.addWidget(pos_group, 1)
+
+        # ── 按钮 ──
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self._btn_ok = QPushButton("确定")
+        self._btn_ok.setStyleSheet("""
+            QPushButton {
+                background-color: #2E7D32; color: #fff;
+                padding: 6px 24px; border: 1px solid #4CAF50;
+                border-radius: 3px; font-weight: bold; font-size: 14px;
+            }
+            QPushButton:hover { background-color: #388E3C; }
+        """)
+
+        self._btn_cancel = QPushButton("取消")
+        self._btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c; color: #d4d4d4;
+                padding: 6px 24px; border: 1px solid #555;
+                border-radius: 3px; font-size: 14px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+        """)
+
+        btn_layout.addWidget(self._btn_ok)
+        btn_layout.addWidget(self._btn_cancel)
+        layout.addLayout(btn_layout)
+
+        # 连接信号
+        self._btn_ok.clicked.connect(self._on_ok)
+        self._btn_cancel.clicked.connect(self.reject)
+        self._btn_add_pos.clicked.connect(self._add_position_row)
+        self._btn_remove_pos.clicked.connect(self._remove_selected_row)
+
+        # 加载已有位置数据
+        if self._config:
+            positions = self._config.get("positions", [])
+            for pos in positions:
+                self._add_position_row(
+                    name=pos.get("name", ""),
+                    position=pos.get("position", 0),
+                    scheme=pos.get("scheme", "")
+                )
+
+    def _add_position_row(self, name="", position=0, scheme=""):
+        """添加一行位置配置"""
+        row = self._pos_table.rowCount()
+        self._pos_table.insertRow(row)
+
+        # 位置名称
+        name_item = QTableWidgetItem(str(name))
+        self._pos_table.setItem(row, 0, name_item)
+
+        # 坐标
+        pos_item = QTableWidgetItem(str(position))
+        self._pos_table.setItem(row, 1, pos_item)
+
+        # 方案选择（下拉框）
+        combo = QComboBox()
+        combo.setEditable(True)
+        combo.setStyleSheet("""
+            QComboBox {
+                background-color: #3c3c3c; color: #d4d4d4;
+                border: 1px solid #555; padding: 2px 4px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #2d2d2d; color: #d4d4d4;
+            }
+        """)
+        # 加载所有可用方案
+        from core.paths import SCHEME_DIR
+        import os
+        combo.addItem("")
+        if os.path.exists(SCHEME_DIR):
+            for f in sorted(os.listdir(SCHEME_DIR)):
+                if f.endswith(".json"):
+                    sname = os.path.splitext(f)[0]
+                    combo.addItem(sname)
+        if scheme:
+            combo.setCurrentText(scheme)
+        self._pos_table.setCellWidget(row, 2, combo)
+
+        # 删除按钮（占位列）
+        self._pos_table.setItem(row, 3, QTableWidgetItem(""))
+
+    def _remove_selected_row(self):
+        """删除选中的行"""
+        row = self._pos_table.currentRow()
+        if row >= 0:
+            self._pos_table.removeRow(row)
+
+    def _on_ok(self):
+        """确定按钮"""
+        name = self._edit_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "提示", "请输入产品名称")
+            return
+
+        # 收集位置数据
+        positions = []
+        for row in range(self._pos_table.rowCount()):
+            name_item = self._pos_table.item(row, 0)
+            pos_item = self._pos_table.item(row, 1)
+            combo = self._pos_table.cellWidget(row, 2)
+
+            pos_name = name_item.text().strip() if name_item else ""
+            pos_value = int(pos_item.text().strip()) if pos_item and pos_item.text().strip() else 0
+            scheme_name = combo.currentText().strip() if combo else ""
+
+            if pos_name:  # 只保存有名称的位置
+                positions.append({
+                    "name": pos_name,
+                    "position": pos_value,
+                    "scheme": scheme_name
+                })
+
+        # 构建配置
+        config = {
+            "name": name,
+            "description": self._edit_desc.text().strip(),
+            "camera": {
+                "exposure_time": int(self._edit_exposure.value()),
+                "gain": self._edit_gain.value()
+            },
+            "motion": {
+                "axis": 1,
+                "v_max": int(self._edit_vmax.value()),
+                "a_max": 100000,
+                "origin_position": self._edit_origin.value(),
+                "move_timeout_s": self._edit_timeout.value()
+            },
+            "di_bit": self._edit_di_bit.value(),
+            "poll_interval_ms": 50,
+            "positions": positions
+        }
+
+        # 保存
+        from core.product_manager import save_product
+        if save_product(config):
+            log_info(f"产品配置已保存: {name}")
+            self._config = config
+            self.accept()
+        else:
+            QMessageBox.critical(self, "错误", f"保存产品配置「{name}」失败")
