@@ -91,50 +91,49 @@ else:
     print(f"[WARN] 未找到 data/ 目录")
 
 # ============================================================
-# MvImport 目录 - 海康威视相机 SDK
+# 大恒 GalaxySDK DLL 打包
 # ============================================================
-# 将 MvImport Python 模块作为 data 打包
-_mvimport_dir = 'MvImport'
-
-if os.path.exists(_mvimport_dir):
-    datas.append((_mvimport_dir, _mvimport_dir))
-    print(f"[INFO] 找到 MvImport 目录，已加入打包数据")
-else:
-    print(f"[WARN] 未找到 MvImport 目录，相机功能将不可用")
-    print(f"[WARN] 请从工控机拷贝 MvImport 目录到项目根目录后重新打包")
-
-# 查找 MVS Runtime 安装目录（64位）
-# MvCameraControl.dll 依赖大量其他 DLL（MVGigEVisionSDK.dll、MvUsb3vTL.dll 等），
-# 需要将整个 Runtime 目录的 DLL 都打包进去
-#
-# 注意：PyInstaller 的 pyimod03_ctypes.py 拦截了 WinDLL 调用，
+# gxipy 模块通过 WinDLL('GxIAPI.dll') 和 WinDLL('DxImageProc.dll') 加载
+# PyInstaller 的 pyimod03_ctypes.py 拦截了 WinDLL 调用，
 # 其 _frozen_name() 函数只在 sys._MEIPASS（即 _internal/）下搜索 DLL。
 # 因此 DLL 必须放在 _internal/ 根目录下，不能放在子目录中。
-_mvs_runtime_dirs = [
-    os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'),
-                 'Common Files', 'MVS', 'Runtime', 'Win64_x64'),
-    os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'),
-                 'Common Files', 'MVS', 'Runtime', 'Win64_x64'),
-]
 
-_mvs_runtime_dir = None
-for _dir in _mvs_runtime_dirs:
-    if os.path.isdir(_dir):
-        _mvs_runtime_dir = _dir
-        print(f"[INFO] 找到 MVS Runtime 目录: {_dir}")
-        break
+# 优先使用项目根目录下的 DLL（便携式部署）
+_daheng_dlls = []
+for _dll_name in ['GxIAPI.dll', 'DxImageProc.dll']:
+    _local_dll = os.path.join(os.getcwd(), _dll_name)
+    if os.path.exists(_local_dll):
+        _daheng_dlls.append(_local_dll)
+        print(f"[INFO] 找到大恒 DLL（项目目录）: {_local_dll}")
+    else:
+        # 回退到 SDK 安装目录
+        _sdk_dll = os.path.join(
+            os.environ.get('ProgramFiles', 'C:\\Program Files'),
+            'Daheng Imaging', 'GalaxySDK', 'APIDll', 'Win64', _dll_name
+        )
+        if os.path.exists(_sdk_dll):
+            _daheng_dlls.append(_sdk_dll)
+            print(f"[INFO] 找到大恒 DLL（SDK 目录）: {_sdk_dll}")
+        else:
+            print(f"[WARN] 未找到大恒 DLL: {_dll_name}，相机功能将不可用")
 
-if _mvs_runtime_dir:
-    # 将 MVS Runtime 目录下所有 DLL 打包到 _internal/ 根目录（即 sys._MEIPASS）
-    # 这样 PyInstaller 的 _frozen_name() 就能找到它们
-    for _f in os.listdir(_mvs_runtime_dir):
-        if _f.lower().endswith('.dll'):
-            _src = os.path.join(_mvs_runtime_dir, _f)
-            binaries.append((_src, '.'))  # '.' 表示 _internal/ 根目录
-    print(f"[INFO] MVS Runtime DLL 已全部加入打包 binaries（到 _internal/ 根目录）")
+for _dll_path in _daheng_dlls:
+    binaries.append((_dll_path, '.'))  # '.' 表示 _internal/ 根目录
+
+# ============================================================
+# NMC 运动控制卡 DLL 打包
+# ============================================================
+# core/nmc_sdk.py 通过 ctypes.CDLL('MCDLL_NET.dll') 加载
+# PyInstaller 无法自动追踪 ctypes.CDLL 调用，需要手动添加
+# nmc_sdk.load_dll() 的搜索路径包括 os.getcwd()（exe 目录）和脚本目录
+# 因此 DLL 需要放在 _internal/ 根目录下
+_nmc_dll_name = 'MCDLL_NET.dll'
+_nmc_dll_path = os.path.join(os.getcwd(), _nmc_dll_name)
+if os.path.exists(_nmc_dll_path):
+    binaries.append((_nmc_dll_path, '.'))  # '.' 表示 _internal/ 根目录
+    print(f"[INFO] 找到 NMC DLL: {_nmc_dll_path}")
 else:
-    print(f"[WARN] 未找到 MVS Runtime 目录，相机功能将不可用")
-    print(f"[WARN] 请安装海康威视 MVS SDK")
+    print(f"[WARN] 未找到 NMC DLL: {_nmc_dll_name}，运动控制功能将不可用")
 
 a = Analysis(
     ['main.py'],
@@ -196,6 +195,21 @@ if os.path.exists(_TOP_LEVEL_EXE):
         print(f"[后处理] 已删除顶层独立 exe: {_TOP_LEVEL_EXE}")
     except Exception as e:
         print(f"[后处理] 删除顶层 exe 失败: {e}")
+
+# ============================================================
+# 后处理：将 MCDLL_NET.dll 复制到 exe 同级目录
+# ============================================================
+# nmc_sdk.py 的 load_dll() 会搜索 os.getcwd()（即 exe 所在目录）
+# 而 binaries 打包到 _internal/，所以需要额外复制一份到 exe 目录
+_NMC_DLL_SRC = os.path.join('dist', 'VisionSystem', '_internal', 'MCDLL_NET.dll')
+_NMC_DLL_DST = os.path.join('dist', 'VisionSystem', 'MCDLL_NET.dll')
+if os.path.exists(_NMC_DLL_SRC) and not os.path.exists(_NMC_DLL_DST):
+    try:
+        import shutil
+        shutil.copy2(_NMC_DLL_SRC, _NMC_DLL_DST)
+        print(f"[后处理] 已复制 MCDLL_NET.dll 到 exe 同级目录")
+    except Exception as e:
+        print(f"[后处理] 复制 MCDLL_NET.dll 失败: {e}")
 
 # ============================================================
 # 后处理：删除不需要的大体积 DLL 文件（可安全删除，项目未使用）
