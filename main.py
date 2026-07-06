@@ -42,14 +42,14 @@ def main():
         QWidget {
             background-color: #2d2d2d;
             color: #d4d4d4;
-            font-size: 13px;
+            font-size: 12px;
         }
         QPushButton {
             background-color: #3c3c3c;
             border: 1px solid #555;
-            border-radius: 4px;
-            padding: 6px 16px;
-            min-height: 24px;
+            border-radius: 3px;
+            padding: 3px 10px;
+            min-height: 20px;
             color: #d4d4d4;
         }
         QPushButton:hover {
@@ -63,9 +63,9 @@ def main():
         QComboBox {
             background-color: #3c3c3c;
             border: 1px solid #555;
-            border-radius: 4px;
-            padding: 4px 8px;
-            min-height: 24px;
+            border-radius: 3px;
+            padding: 2px 6px;
+            min-height: 20px;
             color: #d4d4d4;
         }
         QComboBox:hover {
@@ -82,9 +82,9 @@ def main():
         QLineEdit {
             background-color: #3c3c3c;
             border: 1px solid #555;
-            border-radius: 4px;
-            padding: 4px 8px;
-            min-height: 24px;
+            border-radius: 3px;
+            padding: 2px 6px;
+            min-height: 20px;
             color: #d4d4d4;
         }
         QLineEdit:focus {
@@ -93,7 +93,7 @@ def main():
         QListWidget {
             background-color: #2d2d2d;
             border: 1px solid #444;
-            border-radius: 4px;
+            border-radius: 3px;
             color: #d4d4d4;
         }
         QListWidget::item:hover {
@@ -109,11 +109,11 @@ def main():
         }
         QTabBar::tab {
             background-color: #3c3c3c;
-            padding: 8px 20px;
+            padding: 4px 12px;
             border: 1px solid #444;
             border-bottom: none;
-            border-top-left-radius: 4px;
-            border-top-right-radius: 4px;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
             color: #999;
         }
         QTabBar::tab:selected {
@@ -123,25 +123,25 @@ def main():
         }
         QGroupBox {
             border: 1px solid #444;
-            border-radius: 6px;
-            margin-top: 12px;
-            padding-top: 16px;
+            border-radius: 4px;
+            margin-top: 8px;
+            padding-top: 12px;
             color: #d4d4d4;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
-            left: 12px;
-            padding: 0 6px;
+            left: 10px;
+            padding: 0 4px;
             color: #d4d4d4;
         }
         QScrollBar:vertical {
             background-color: #1e1e1e;
-            width: 10px;
+            width: 8px;
         }
         QScrollBar::handle:vertical {
             background-color: #555;
-            border-radius: 5px;
-            min-height: 20px;
+            border-radius: 4px;
+            min-height: 16px;
         }
         QScrollBar::handle:vertical:hover {
             background-color: #4A90D9;
@@ -180,7 +180,7 @@ def main():
             color: #d4d4d4;
             border: 1px solid #555;
             border-radius: 3px;
-            padding: 2px 4px;
+            padding: 1px 3px;
         }
         QSpinBox:focus {
             border-color: #4A90D9;
@@ -196,7 +196,7 @@ def main():
             color: #999;
             border: none;
             border-bottom: 1px solid #444;
-            padding: 4px 8px;
+            padding: 2px 6px;
             font-weight: bold;
         }
         QDialog {

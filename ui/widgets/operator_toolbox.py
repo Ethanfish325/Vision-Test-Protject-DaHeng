@@ -16,7 +16,7 @@ class DraggableOperatorItem(QListWidgetItem):
         self._category = category
         self.setForeground(QColor("#d4d4d4"))
         self.setToolTip(f"{category} - {tool_name}")
-        self.setSizeHint(QSize(0, 32))
+        self.setSizeHint(QSize(0, 26))
 
     def tool_name(self) -> str:
         return self._tool_name
@@ -36,7 +36,7 @@ class OperatorCategoryItem(QListWidgetItem):
         self.setFont(font)
         self.setForeground(QColor("#e0e0e0"))
         self.setFlags(Qt.ItemIsEnabled)
-        self.setSizeHint(QSize(0, 30))
+        self.setSizeHint(QSize(0, 24))
 
     def category(self) -> str:
         return self._category
@@ -53,13 +53,13 @@ class ToolboxListWidget(QListWidget):
             QListWidget {
                 background-color: #252526;
                 border: 1px solid #3c3c3c;
-                border-radius: 4px;
-                padding: 2px;
+                border-radius: 3px;
+                padding: 1px;
             }
             QListWidget::item {
-                padding: 4px 8px;
-                border-radius: 3px;
-                margin: 1px 0;
+                padding: 2px 6px;
+                border-radius: 2px;
+                margin: 0;
             }
             QListWidget::item:hover {
                 background-color: #2a2d2e;
@@ -87,16 +87,16 @@ class OperatorToolbox(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         # Title
         title = QLabel("算子工具箱")
         title.setStyleSheet("""
-            font-size: 16px;
+            font-size: 13px;
             font-weight: bold;
             color: #cccccc;
-            padding: 2px 0;
+            padding: 1px 0;
         """)
         layout.addWidget(title)
 
@@ -108,11 +108,11 @@ class OperatorToolbox(QWidget):
         self._search_box.installEventFilter(self)
         self._search_box.setStyleSheet("""
             QLineEdit {
-                padding: 6px 10px;
+                padding: 3px 6px;
                 border: 1px solid #3c3c3c;
-                border-radius: 4px;
+                border-radius: 3px;
                 background-color: #3c3c3c;
-                font-size: 14px;
+                font-size: 12px;
                 color: #cccccc;
             }
             QLineEdit:focus {
@@ -127,7 +127,7 @@ class OperatorToolbox(QWidget):
         self._list.setDragEnabled(True)
         self._list.setDefaultDropAction(Qt.CopyAction)
         self._list.setSelectionMode(QListWidget.SingleSelection)
-        self._list.setIconSize(QSize(20, 20))
+        self._list.setIconSize(QSize(16, 16))
         self._list.setSpacing(0)
         layout.addWidget(self._list)
 

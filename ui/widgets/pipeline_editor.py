@@ -31,18 +31,18 @@ class PipelineEditor(QWidget):
         splitter = QSplitter(Qt.Horizontal)
 
         self.operator_toolbox = OperatorToolbox()
-        self.operator_toolbox.setMinimumWidth(150)
-        self.operator_toolbox.setMaximumWidth(220)
+        self.operator_toolbox.setMinimumWidth(120)
+        self.operator_toolbox.setMaximumWidth(160)
 
         self.flow_canvas = FlowCanvas()
-        self.flow_canvas.setMinimumWidth(400)
+        self.flow_canvas.setMinimumWidth(300)
 
         splitter.addWidget(self.operator_toolbox)
         splitter.addWidget(self.flow_canvas)
 
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 4)
-        splitter.setSizes([200, 800])
+        splitter.setSizes([150, 600])
 
         main_layout.addWidget(splitter, 1)
 
@@ -53,15 +53,15 @@ class PipelineEditor(QWidget):
         toolbar.setStyleSheet("""
             background-color: #252525; border-bottom: 1px solid #444;
         """)
-        toolbar.setFixedHeight(40)
+        toolbar.setFixedHeight(30)
         layout = QHBoxLayout(toolbar)
-        layout.setContentsMargins(8, 2, 8, 2)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 1, 6, 1)
+        layout.setSpacing(4)
 
         self.btn_clear = QPushButton("🗑 清空")
         self.btn_clear.setStyleSheet("""
-            QPushButton { background-color: #3c3c3c; color: #EF5350; padding: 2px 12px;
-                         border: 1px solid #555; border-radius: 3px; font-size: 17px; }
+            QPushButton { background-color: #3c3c3c; color: #EF5350; padding: 1px 8px;
+                         border: 1px solid #555; border-radius: 3px; font-size: 13px; }
             QPushButton:hover { background-color: #4a2a2a; }
         """)
 
@@ -69,10 +69,10 @@ class PipelineEditor(QWidget):
         layout.addStretch()
 
         self.status_label = QLabel("就绪")
-        self.status_label.setStyleSheet("color: #999; font-size: 17px;")
+        self.status_label.setStyleSheet("color: #999; font-size: 13px;")
 
         self.node_count_label = QLabel("算子: 0")
-        self.node_count_label.setStyleSheet("color: #999; font-size: 17px;")
+        self.node_count_label.setStyleSheet("color: #999; font-size: 13px;")
 
         layout.addWidget(self.node_count_label)
         layout.addWidget(self.status_label)

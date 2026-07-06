@@ -52,23 +52,23 @@ class CameraPanel(QWidget):
     def _setup_ui(self):
         """构建 UI 布局"""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(4, 4, 4, 4)
+        main_layout.setSpacing(4)
 
         # ========== 顶部控制栏 ==========
         ctrl_layout = QHBoxLayout()
-        ctrl_layout.setSpacing(6)
+        ctrl_layout.setSpacing(4)
 
         lbl_camera = QLabel("相机:")
         lbl_camera.setStyleSheet("color: #d4d4d4; font-weight: bold;")
 
         self.device_combo = QComboBox()
-        self.device_combo.setMinimumWidth(280)
+        self.device_combo.setMinimumWidth(200)
         self.device_combo.setStyleSheet("""
             QComboBox {
                 background-color: #3c3c3c; color: #d4d4d4;
                 border: 1px solid #555; border-radius: 3px;
-                padding: 4px 8px; min-height: 24px;
+                padding: 2px 6px; min-height: 20px;
             }
             QComboBox::drop-down { border: none; }
             QComboBox QAbstractItemView {
@@ -81,8 +81,8 @@ class CameraPanel(QWidget):
         self.refresh_btn.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c; color: #d4d4d4;
-                padding: 4px 14px; border: 1px solid #555;
-                border-radius: 3px; min-height: 24px;
+                padding: 2px 10px; border: 1px solid #555;
+                border-radius: 3px; min-height: 20px;
             }
             QPushButton:hover { background-color: #4a4a4a; }
         """)
@@ -92,8 +92,8 @@ class CameraPanel(QWidget):
         self.open_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1a3a5c; color: #4A90D9;
-                padding: 4px 14px; border: 1px solid #2a5a8c;
-                border-radius: 3px; min-height: 24px; font-weight: bold;
+                padding: 2px 10px; border: 1px solid #2a5a8c;
+                border-radius: 3px; min-height: 20px; font-weight: bold;
             }
             QPushButton:hover { background-color: #2a4a7c; }
             QPushButton:disabled { background-color: #3c3c3c; color: #666; border-color: #555; }
@@ -104,8 +104,8 @@ class CameraPanel(QWidget):
         self.close_btn.setStyleSheet("""
             QPushButton {
                 background-color: #5c1a1a; color: #D94A4A;
-                padding: 4px 14px; border: 1px solid #8c2a2a;
-                border-radius: 3px; min-height: 24px; font-weight: bold;
+                padding: 2px 10px; border: 1px solid #8c2a2a;
+                border-radius: 3px; min-height: 20px; font-weight: bold;
             }
             QPushButton:hover { background-color: #7c2a2a; }
             QPushButton:disabled { background-color: #3c3c3c; color: #666; border-color: #555; }
@@ -116,8 +116,8 @@ class CameraPanel(QWidget):
         self.capture_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1976D2; color: #fff; font-weight: bold;
-                padding: 6px 22px; border: none; border-radius: 3px;
-                font-size: 17px; min-height: 28px;
+                padding: 3px 14px; border: none; border-radius: 3px;
+                font-size: 13px; min-height: 22px;
             }
             QPushButton:hover { background-color: #1565C0; }
             QPushButton:disabled { background-color: #3c3c3c; color: #666; }
@@ -140,10 +140,10 @@ class CameraPanel(QWidget):
         display_layout.setSpacing(4)
 
         display_title = QLabel("实时画面")
-        display_title.setStyleSheet("font-size: 17px; font-weight: bold; color: #d4d4d4;")
+        display_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #d4d4d4;")
 
         self.display_label = ZoomableLabel("相机未打开")
-        self.display_label.setMinimumSize(640, 480)
+        self.display_label.setMinimumSize(400, 300)
         self.display_label.setStyleSheet("""
             ZoomableLabel {
                 background-color: #0d0d0d; border: 1px solid #444;
@@ -156,28 +156,28 @@ class CameraPanel(QWidget):
 
         # 右侧：参数面板
         param_widget = QWidget()
-        param_widget.setMinimumWidth(280)
-        param_widget.setMaximumWidth(320)
+        param_widget.setMinimumWidth(200)
+        param_widget.setMaximumWidth(260)
         param_layout = QVBoxLayout(param_widget)
-        param_layout.setContentsMargins(8, 0, 0, 0)
-        param_layout.setSpacing(8)
+        param_layout.setContentsMargins(4, 0, 0, 0)
+        param_layout.setSpacing(4)
 
         # -- 触发模式 --
         trigger_group = QGroupBox("触发模式")
         trigger_group.setStyleSheet("""
             QGroupBox {
-                font-weight: bold; font-size: 16px; border: 1px solid #444;
-                border-radius: 4px; margin-top: 10px; padding-top: 16px;
+                font-weight: bold; font-size: 13px; border: 1px solid #444;
+                border-radius: 3px; margin-top: 6px; padding-top: 10px;
                 color: #d4d4d4;
             }
             QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
+                subcontrol-origin: margin; left: 8px; padding: 0 4px;
                 color: #d4d4d4;
             }
         """)
         trigger_layout = QVBoxLayout(trigger_group)
-        trigger_layout.setContentsMargins(8, 8, 8, 8)
-        trigger_layout.setSpacing(6)
+        trigger_layout.setContentsMargins(4, 4, 4, 4)
+        trigger_layout.setSpacing(4)
 
         self.trigger_combo = QComboBox()
         self.trigger_combo.addItems(["连续采集", "触发模式（软触发）"])
@@ -199,8 +199,8 @@ class CameraPanel(QWidget):
         self.trigger_btn.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c; color: #d4d4d4;
-                padding: 6px 12px; border: 1px solid #555;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 8px; border: 1px solid #555;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #4a4a4a; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; }
@@ -213,8 +213,8 @@ class CameraPanel(QWidget):
         exp_group = QGroupBox("曝光时间")
         exp_group.setStyleSheet(trigger_group.styleSheet())
         exp_layout = QVBoxLayout(exp_group)
-        exp_layout.setContentsMargins(8, 8, 8, 8)
-        exp_layout.setSpacing(4)
+        exp_layout.setContentsMargins(4, 4, 4, 4)
+        exp_layout.setSpacing(2)
 
         exp_slider_layout = QHBoxLayout()
         self.exp_slider = QSlider(Qt.Horizontal)
@@ -258,8 +258,8 @@ class CameraPanel(QWidget):
         gain_group = QGroupBox("增益")
         gain_group.setStyleSheet(trigger_group.styleSheet())
         gain_layout = QVBoxLayout(gain_group)
-        gain_layout.setContentsMargins(8, 8, 8, 8)
-        gain_layout.setSpacing(4)
+        gain_layout.setContentsMargins(4, 4, 4, 4)
+        gain_layout.setSpacing(2)
 
         gain_slider_layout = QHBoxLayout()
         self.gain_slider = QSlider(Qt.Horizontal)
@@ -303,8 +303,8 @@ class CameraPanel(QWidget):
         fps_group = QGroupBox("帧率")
         fps_group.setStyleSheet(trigger_group.styleSheet())
         fps_layout = QVBoxLayout(fps_group)
-        fps_layout.setContentsMargins(8, 8, 8, 8)
-        fps_layout.setSpacing(4)
+        fps_layout.setContentsMargins(4, 4, 4, 4)
+        fps_layout.setSpacing(2)
 
         fps_slider_layout = QHBoxLayout()
         self.fps_slider = QSlider(Qt.Horizontal)
@@ -344,8 +344,8 @@ class CameraPanel(QWidget):
         wb_group = QGroupBox("白平衡")
         wb_group.setStyleSheet(trigger_group.styleSheet())
         wb_layout = QVBoxLayout(wb_group)
-        wb_layout.setContentsMargins(8, 8, 8, 8)
-        wb_layout.setSpacing(4)
+        wb_layout.setContentsMargins(4, 4, 4, 4)
+        wb_layout.setSpacing(2)
 
         # 白平衡预设按钮
         wb_preset_layout = QHBoxLayout()

@@ -62,10 +62,10 @@ class StepLogPanel(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
 
         title = QLabel("执行日志")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #d4d4d4; padding: 2px 0;")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #d4d4d4; padding: 1px 0;")
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
@@ -74,10 +74,10 @@ class StepLogPanel(QWidget):
                 background-color: #1a1a1a; color: #c8c8c8;
                 border: 1px solid #444; border-radius: 3px;
                 font-family: Consolas, "Courier New", monospace;
-                font-size: 17px; padding: 4px;
+                font-size: 13px; padding: 2px;
             }
         """)
-        self.log_text.setMinimumHeight(120)
+        self.log_text.setMinimumHeight(60)
 
         layout.addWidget(title)
         layout.addWidget(self.log_text, 1)
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         self.setWindowTitle("视觉检测系统")
-        self.setMinimumSize(1400, 850)
+        self.setMinimumSize(1024, 700)
 
         self._setup_menu_bar()
 
@@ -271,10 +271,10 @@ class MainWindow(QMainWindow):
         toolbar.setStyleSheet("""
             background-color: #1e1e1e; border-bottom: 1px solid #444;
         """)
-        toolbar.setFixedHeight(40)
+        toolbar.setFixedHeight(32)
         layout = QHBoxLayout(toolbar)
-        layout.setContentsMargins(10, 2, 10, 2)
-        layout.setSpacing(8)
+        layout.setContentsMargins(6, 1, 6, 1)
+        layout.setSpacing(4)
 
         # === COMMENTED OUT: 生产模式按钮 ===
         # self.btn_worker_mode = QPushButton("🔧 生产模式")
@@ -299,8 +299,8 @@ class MainWindow(QMainWindow):
         self.btn_automation_mode.setChecked(True)  # 默认选中自动化模式
         self.btn_automation_mode.setStyleSheet("""
             QPushButton {
-                background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
-                border: 1px solid #555; border-radius: 3px; font-size: 18px;
+                background-color: #3c3c3c; color: #d4d4d4; padding: 2px 10px;
+                border: 1px solid #555; border-radius: 3px; font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:checked {
@@ -315,8 +315,8 @@ class MainWindow(QMainWindow):
         self.btn_engineer_mode.setEnabled(True)  # 默认操作员模式，禁用设计模式
         self.btn_engineer_mode.setStyleSheet("""
             QPushButton {
-                background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
-                border: 1px solid #555; border-radius: 3px; font-size: 18px;
+                background-color: #3c3c3c; color: #d4d4d4; padding: 2px 10px;
+                border: 1px solid #555; border-radius: 3px; font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:checked {
@@ -338,7 +338,7 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
         self.mode_scheme_label = QLabel("当前方案: 未选择")
-        self.mode_scheme_label.setStyleSheet("color: #999; font-size: 17px;")
+        self.mode_scheme_label.setStyleSheet("color: #999; font-size: 13px;")
 
         layout.addWidget(self.mode_scheme_label)
 
@@ -380,26 +380,26 @@ class MainWindow(QMainWindow):
         """弹出登录对话框，选择角色并输入密码"""
         dialog = QDialog(self)
         dialog.setWindowTitle("登录")
-        dialog.setFixedSize(360, 220)
+        dialog.setFixedSize(300, 180)
         dialog.setStyleSheet("""
             QDialog { background-color: #2d2d2d; }
-            QLabel { color: #d4d4d4; font-size: 16px; }
+            QLabel { color: #d4d4d4; font-size: 13px; }
             QComboBox, QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
                 border: 1px solid #555; border-radius: 3px;
-                padding: 6px 10px; font-size: 16px;
+                padding: 3px 8px; font-size: 13px;
             }
             QPushButton {
                 background-color: #1a3a5c; color: #4A90D9;
                 border: 1px solid #2a5a8c; border-radius: 3px;
-                padding: 8px 24px; font-size: 16px; font-weight: bold;
+                padding: 4px 16px; font-size: 13px; font-weight: bold;
             }
             QPushButton:hover { background-color: #2a4a7c; }
         """)
 
         layout = QVBoxLayout(dialog)
-        layout.setSpacing(12)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 12, 12, 12)
 
         # 角色选择
         role_layout = QHBoxLayout()
@@ -420,7 +420,7 @@ class MainWindow(QMainWindow):
 
         # 错误提示
         error_label = QLabel("")
-        error_label.setStyleSheet("color: #ff5252; font-size: 14px;")
+        error_label.setStyleSheet("color: #ff5252; font-size: 12px;")
         error_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(error_label)
 
@@ -610,13 +610,14 @@ class MainWindow(QMainWindow):
     def _build_engineer_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
 
         scheme_bar = QWidget()
         scheme_bar.setStyleSheet("background-color: #252525; border: 1px solid #444; border-radius: 3px;")
         scheme_bar_layout = QHBoxLayout(scheme_bar)
-        scheme_bar_layout.setContentsMargins(8, 4, 8, 4)
+        scheme_bar_layout.setContentsMargins(6, 2, 6, 2)
+        scheme_bar_layout.setSpacing(4)
 
         lbl_scheme = QLabel("方案:")
         lbl_scheme.setStyleSheet("color: #d4d4d4;")
@@ -647,16 +648,16 @@ class MainWindow(QMainWindow):
         for btn in [self.eng_btn_new, self.eng_btn_save, self.eng_btn_apply, self.eng_btn_rename, self.eng_btn_delete]:
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #3c3c3c; color: #d4d4d4; padding: 4px 12px;
-                    border: 1px solid #555; border-radius: 3px; font-size: 17px;
+                    background-color: #3c3c3c; color: #d4d4d4; padding: 2px 8px;
+                    border: 1px solid #555; border-radius: 3px; font-size: 13px;
                 }
                 QPushButton:hover { background-color: #4a4a4a; }
             """)
 
         self.eng_btn_apply.setStyleSheet("""
             QPushButton {
-                background-color: #1a3a5c; color: #4A90D9; padding: 4px 16px;
-                border: 1px solid #2a5a8c; border-radius: 3px; font-size: 17px; font-weight: bold;
+                background-color: #1a3a5c; color: #4A90D9; padding: 2px 10px;
+                border: 1px solid #2a5a8c; border-radius: 3px; font-size: 13px; font-weight: bold;
             }
             QPushButton:hover { background-color: #2a4a7c; }
         """)
@@ -674,27 +675,27 @@ class MainWindow(QMainWindow):
         left_eng_panel = QWidget()
         left_eng_layout = QVBoxLayout(left_eng_panel)
         left_eng_layout.setContentsMargins(0, 0, 0, 0)
-        left_eng_layout.setSpacing(6)
+        left_eng_layout.setSpacing(4)
 
         test_group = QGroupBox("测试图像")
         test_group.setStyleSheet("""
             QGroupBox {
-                font-weight: bold; font-size: 18px; border: 1px solid #444;
-                border-radius: 4px; margin-top: 10px; padding-top: 16px; color: #d4d4d4;
+                font-weight: bold; font-size: 14px; border: 1px solid #444;
+                border-radius: 4px; margin-top: 8px; padding-top: 12px; color: #d4d4d4;
             }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #d4d4d4; }
+            QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #d4d4d4; }
         """)
         test_layout = QVBoxLayout(test_group)
-        test_layout.setContentsMargins(4, 8, 4, 4)
-        test_layout.setSpacing(4)
+        test_layout.setContentsMargins(2, 6, 2, 2)
+        test_layout.setSpacing(2)
 
         test_toolbar = QHBoxLayout()
         self.eng_btn_run_preview = QPushButton("📷 测试")
         self.eng_btn_run_preview.setStyleSheet("""
             QPushButton {
-                background-color: #1a3a5c; color: #4A90D9; padding: 4px 16px;
+                background-color: #1a3a5c; color: #4A90D9; padding: 2px 10px;
                 border: 1px solid #2a5a8c; border-radius: 3px; font-weight: bold;
-                font-size: 18px;
+                font-size: 14px;
             }
             QPushButton:hover { background-color: #2a4a7c; }
         """)
@@ -704,10 +705,10 @@ class MainWindow(QMainWindow):
         self.eng_time_label = QLabel("")
         self.eng_time_label.setAlignment(Qt.AlignCenter)
         self.eng_time_label.setStyleSheet("""
-            font-size: 18px; font-weight: bold; color: #4fc3f7;
+            font-size: 14px; font-weight: bold; color: #4fc3f7;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 4px; padding: 2px 10px;
-            min-width: 80px;
+            border-radius: 4px; padding: 1px 6px;
+            min-width: 60px;
         """)
         test_toolbar.addWidget(self.eng_time_label)
 
@@ -717,15 +718,15 @@ class MainWindow(QMainWindow):
         step_nav_bar = QWidget()
         step_nav_bar.setStyleSheet("background-color: #252525; border: 1px solid #444; border-radius: 3px;")
         step_nav_layout = QHBoxLayout(step_nav_bar)
-        step_nav_layout.setContentsMargins(6, 2, 6, 2)
-        step_nav_layout.setSpacing(6)
+        step_nav_layout.setContentsMargins(4, 1, 4, 1)
+        step_nav_layout.setSpacing(4)
 
         self.eng_btn_prev_step = QPushButton("◀ 上一步")
         self.eng_btn_prev_step.setEnabled(False)
         self.eng_btn_prev_step.setStyleSheet("""
             QPushButton {
-                background-color: #3c3c3c; color: #d4d4d4; padding: 3px 10px;
-                border: 1px solid #555; border-radius: 3px; font-size: 15px;
+                background-color: #3c3c3c; color: #d4d4d4; padding: 1px 6px;
+                border: 1px solid #555; border-radius: 3px; font-size: 12px;
             }
             QPushButton:hover { background-color: #4a4a4a; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
@@ -734,16 +735,16 @@ class MainWindow(QMainWindow):
         self.eng_step_label = QLabel("最终结果")
         self.eng_step_label.setAlignment(Qt.AlignCenter)
         self.eng_step_label.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #4A90D9;
-            padding: 3px 8px; min-width: 120px;
+            font-size: 13px; font-weight: bold; color: #4A90D9;
+            padding: 1px 6px; min-width: 80px;
         """)
 
         self.eng_btn_next_step = QPushButton("下一步 ▶")
         self.eng_btn_next_step.setEnabled(False)
         self.eng_btn_next_step.setStyleSheet("""
             QPushButton {
-                background-color: #3c3c3c; color: #d4d4d4; padding: 3px 10px;
-                border: 1px solid #555; border-radius: 3px; font-size: 15px;
+                background-color: #3c3c3c; color: #d4d4d4; padding: 1px 6px;
+                border: 1px solid #555; border-radius: 3px; font-size: 12px;
             }
             QPushButton:hover { background-color: #4a4a4a; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
@@ -754,7 +755,7 @@ class MainWindow(QMainWindow):
         step_nav_layout.addWidget(self.eng_btn_next_step)
 
         self.eng_test_display = ZoomableImageWidget("点击「测试」按钮拍照并执行流水线")
-        self.eng_test_display.setMinimumSize(320, 240)
+        self.eng_test_display.setMinimumSize(240, 180)
         self.eng_test_display.label.setStyleSheet("""
             ZoomableLabel {
                 background-color: #0d0d0d; border: 1px solid #444;
@@ -767,18 +768,18 @@ class MainWindow(QMainWindow):
         test_layout.addWidget(self.eng_test_display, 1)
 
         self.eng_result_panel = ResultPanel()
-        self.eng_result_panel.setMaximumHeight(220)
+        self.eng_result_panel.setMaximumHeight(140)
 
         left_eng_layout.addWidget(test_group, 3)
         left_eng_layout.addWidget(self.eng_result_panel, 1)
 
         right_eng_panel = QWidget()
         right_eng_layout = QVBoxLayout(right_eng_panel)
-        right_eng_layout.setContentsMargins(8, 0, 0, 0)
-        right_eng_layout.setSpacing(4)
+        right_eng_layout.setContentsMargins(4, 0, 0, 0)
+        right_eng_layout.setSpacing(2)
 
         self.eng_log = StepLogPanel()
-        self.eng_log.setMaximumHeight(100)
+        self.eng_log.setMaximumHeight(70)
 
         # 右侧标签页：流水线编辑 / 产品配置 / 轴控制
         self.eng_right_tabs = QTabWidget()
@@ -789,9 +790,9 @@ class MainWindow(QMainWindow):
             }
             QTabBar::tab {
                 background-color: #3c3c3c; color: #d4d4d4;
-                padding: 6px 14px; border: 1px solid #444;
+                padding: 3px 10px; border: 1px solid #444;
                 border-bottom: none; border-top-left-radius: 3px;
-                border-top-right-radius: 3px; font-size: 15px;
+                border-top-right-radius: 3px; font-size: 12px;
             }
             QTabBar::tab:selected {
                 background-color: #2d2d2d; color: #4A90D9;
@@ -815,7 +816,7 @@ class MainWindow(QMainWindow):
 
         eng_splitter.addWidget(left_eng_panel)
         eng_splitter.addWidget(right_eng_panel)
-        eng_splitter.setStretchFactor(0, 3)
+        eng_splitter.setStretchFactor(0, 2)
         eng_splitter.setStretchFactor(1, 2)
 
         layout.addWidget(scheme_bar)
@@ -839,28 +840,28 @@ class MainWindow(QMainWindow):
         """构建产品配置标签页"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         # 产品列表
         list_label = QLabel("产品型号列表:")
-        list_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #d4d4d4;")
+        list_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #d4d4d4;")
 
         self._eng_product_list = QListWidget()
         self._eng_product_list.setStyleSheet("""
             QListWidget {
                 background-color: #1e1e1e; color: #d4d4d4;
                 border: 1px solid #444; border-radius: 3px;
-                font-size: 15px;
+                font-size: 12px;
             }
-            QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #333; }
+            QListWidget::item { padding: 3px 6px; border-bottom: 1px solid #333; }
             QListWidget::item:selected { background-color: #1a3a5c; color: #4A90D9; }
             QListWidget::item:hover { background-color: #3a3a3a; }
         """)
 
         # 按钮组
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(6)
+        btn_layout.setSpacing(4)
 
         self._eng_btn_new_product = QPushButton("新建产品")
         self._eng_btn_edit_product = QPushButton("编辑")
@@ -872,8 +873,8 @@ class MainWindow(QMainWindow):
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #3c3c3c; color: #d4d4d4;
-                    padding: 4px 10px; border: 1px solid #555;
-                    border-radius: 3px; font-size: 14px;
+                    padding: 2px 6px; border: 1px solid #555;
+                    border-radius: 3px; font-size: 11px;
                 }
                 QPushButton:hover { background-color: #4a4a4a; }
             """)
@@ -959,20 +960,20 @@ class MainWindow(QMainWindow):
         """构建轴控制标签页（工程师调试用）"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         # ── 轴控制主分组 ──
         axis_group = QGroupBox("轴控制")
         axis_group.setStyleSheet("""
             QGroupBox {
-                font-weight: bold; font-size: 16px; border: 1px solid #444;
-                border-radius: 4px; margin-top: 8px; padding-top: 14px; color: #d4d4d4;
+                font-weight: bold; font-size: 13px; border: 1px solid #444;
+                border-radius: 4px; margin-top: 6px; padding-top: 10px; color: #d4d4d4;
             }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
+            QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
         """)
         axis_layout = QVBoxLayout(axis_group)
-        axis_layout.setSpacing(6)
+        axis_layout.setSpacing(4)
 
         # 轴选择行
         axis_sel_layout = QHBoxLayout()
@@ -991,41 +992,41 @@ class MainWindow(QMainWindow):
 
         # 实时状态显示（命令位置、编码器、速度、轴状态）
         status_grid = QGridLayout()
-        status_grid.setSpacing(4)
+        status_grid.setSpacing(2)
 
         status_grid.addWidget(QLabel("命令位置:"), 0, 0)
         self._eng_axis_pos_label = QLabel("--")
         self._eng_axis_pos_label.setStyleSheet("""
-            font-size: 18px; font-weight: bold; color: #4fc3f7;
+            font-size: 14px; font-weight: bold; color: #4fc3f7;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 3px; padding: 2px 8px;
+            border-radius: 3px; padding: 1px 6px;
         """)
         status_grid.addWidget(self._eng_axis_pos_label, 0, 1)
 
         status_grid.addWidget(QLabel("编码器:"), 0, 2)
         self._eng_axis_enc_label = QLabel("--")
         self._eng_axis_enc_label.setStyleSheet("""
-            font-size: 18px; font-weight: bold; color: #ff9800;
+            font-size: 14px; font-weight: bold; color: #ff9800;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 3px; padding: 2px 8px;
+            border-radius: 3px; padding: 1px 6px;
         """)
         status_grid.addWidget(self._eng_axis_enc_label, 0, 3)
 
         status_grid.addWidget(QLabel("速度:"), 1, 0)
         self._eng_axis_vel_label = QLabel("--")
         self._eng_axis_vel_label.setStyleSheet("""
-            font-size: 16px; color: #d4d4d4;
+            font-size: 13px; color: #d4d4d4;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 3px; padding: 2px 8px;
+            border-radius: 3px; padding: 1px 6px;
         """)
         status_grid.addWidget(self._eng_axis_vel_label, 1, 1)
 
         status_grid.addWidget(QLabel("轴状态:"), 1, 2)
         self._eng_axis_state_label = QLabel("--")
         self._eng_axis_state_label.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #d4d4d4;
+            font-size: 13px; font-weight: bold; color: #d4d4d4;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 3px; padding: 2px 8px;
+            border-radius: 3px; padding: 1px 6px;
         """)
         status_grid.addWidget(self._eng_axis_state_label, 1, 3)
 
@@ -1033,59 +1034,63 @@ class MainWindow(QMainWindow):
 
         # 速度/目标设置
         param_layout = QHBoxLayout()
-        param_layout.setSpacing(8)
+        param_layout.setSpacing(4)
         param_layout.addWidget(QLabel("速度:"))
         self._eng_axis_speed = QLineEdit("50000")
         self._eng_axis_speed.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+                border: 1px solid #555; padding: 1px 4px; border-radius: 3px;
+                font-size: 12px;
             }
         """)
-        self._eng_axis_speed.setFixedWidth(80)
+        self._eng_axis_speed.setFixedWidth(60)
         param_layout.addWidget(self._eng_axis_speed)
         param_layout.addWidget(QLabel("加速度:"))
         self._eng_axis_acc = QLineEdit("100000")
         self._eng_axis_acc.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+                border: 1px solid #555; padding: 1px 4px; border-radius: 3px;
+                font-size: 12px;
             }
         """)
-        self._eng_axis_acc.setFixedWidth(80)
+        self._eng_axis_acc.setFixedWidth(60)
         param_layout.addWidget(self._eng_axis_acc)
         param_layout.addWidget(QLabel("目标位置:"))
         self._eng_axis_target = QLineEdit("0")
         self._eng_axis_target.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+                border: 1px solid #555; padding: 1px 4px; border-radius: 3px;
+                font-size: 12px;
             }
         """)
-        self._eng_axis_target.setFixedWidth(80)
+        self._eng_axis_target.setFixedWidth(60)
         param_layout.addStretch()
         axis_layout.addLayout(param_layout)
 
         # ── 位置移动行（输入位置并移动到指定位置）──
         move_layout = QHBoxLayout()
-        move_layout.setSpacing(8)
+        move_layout.setSpacing(4)
         move_layout.addWidget(QLabel("移动到位置:"))
         self._eng_axis_move_pos = QLineEdit("0")
         self._eng_axis_move_pos.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+                border: 1px solid #555; padding: 1px 4px; border-radius: 3px;
+                font-size: 12px;
             }
         """)
-        self._eng_axis_move_pos.setFixedWidth(100)
+        self._eng_axis_move_pos.setFixedWidth(80)
         move_layout.addWidget(self._eng_axis_move_pos)
 
         self._eng_btn_move_to = QPushButton("移动到")
         self._eng_btn_move_to.setStyleSheet("""
             QPushButton {
                 background-color: #1565C0; color: #fff;
-                padding: 6px 16px; border: 1px solid #1976D2;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 10px; border: 1px solid #1976D2;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #1976D2; }
         """)
@@ -1095,14 +1100,14 @@ class MainWindow(QMainWindow):
 
         # 控制按钮行
         ctrl_layout = QHBoxLayout()
-        ctrl_layout.setSpacing(6)
+        ctrl_layout.setSpacing(4)
 
         self._eng_btn_jog_plus = QPushButton("JOG +")
         self._eng_btn_jog_plus.setStyleSheet("""
             QPushButton {
                 background-color: #2E7D32; color: #fff;
-                padding: 6px 12px; border: 1px solid #4CAF50;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 8px; border: 1px solid #4CAF50;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #388E3C; }
             QPushButton:pressed { background-color: #1B5E20; }
@@ -1112,8 +1117,8 @@ class MainWindow(QMainWindow):
         self._eng_btn_jog_minus.setStyleSheet("""
             QPushButton {
                 background-color: #C62828; color: #fff;
-                padding: 6px 12px; border: 1px solid #EF5350;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 8px; border: 1px solid #EF5350;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #D32F2F; }
             QPushButton:pressed { background-color: #B71C1C; }
@@ -1123,8 +1128,8 @@ class MainWindow(QMainWindow):
         self._eng_btn_stop_axis.setStyleSheet("""
             QPushButton {
                 background-color: #E65100; color: #fff;
-                padding: 6px 12px; border: 1px solid #FF6D00;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 8px; border: 1px solid #FF6D00;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #BF360C; }
         """)
@@ -1133,8 +1138,8 @@ class MainWindow(QMainWindow):
         self._eng_btn_read_pos.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c; color: #d4d4d4;
-                padding: 6px 12px; border: 1px solid #555;
-                border-radius: 3px;
+                padding: 3px 8px; border: 1px solid #555;
+                border-radius: 3px; font-size: 12px;
             }
             QPushButton:hover { background-color: #4a4a4a; }
         """)
@@ -1151,36 +1156,38 @@ class MainWindow(QMainWindow):
         home_group = QGroupBox("回零控制")
         home_group.setStyleSheet("""
             QGroupBox {
-                font-weight: bold; font-size: 16px; border: 1px solid #444;
-                border-radius: 4px; margin-top: 8px; padding-top: 14px; color: #d4d4d4;
+                font-weight: bold; font-size: 13px; border: 1px solid #444;
+                border-radius: 4px; margin-top: 6px; padding-top: 10px; color: #d4d4d4;
             }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
+            QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
         """)
         home_layout = QVBoxLayout(home_group)
-        home_layout.setSpacing(6)
+        home_layout.setSpacing(3)
 
         # 回零参数行
         home_param_layout = QHBoxLayout()
-        home_param_layout.setSpacing(8)
+        home_param_layout.setSpacing(4)
         home_param_layout.addWidget(QLabel("搜索速度:"))
         self._eng_home_speed = QLineEdit("50000")
         self._eng_home_speed.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+                border: 1px solid #555; padding: 1px 4px; border-radius: 3px;
+                font-size: 12px;
             }
         """)
-        self._eng_home_speed.setFixedWidth(80)
+        self._eng_home_speed.setFixedWidth(60)
         home_param_layout.addWidget(self._eng_home_speed)
         home_param_layout.addWidget(QLabel("加速度:"))
         self._eng_home_acc = QLineEdit("50000")
         self._eng_home_acc.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
+                border: 1px solid #555; padding: 1px 4px; border-radius: 3px;
+                font-size: 12px;
             }
         """)
-        self._eng_home_acc.setFixedWidth(80)
+        self._eng_home_acc.setFixedWidth(60)
         home_param_layout.addWidget(self._eng_home_acc)
         home_param_layout.addStretch()
         home_layout.addLayout(home_param_layout)
@@ -1190,9 +1197,9 @@ class MainWindow(QMainWindow):
         home_status_layout.addWidget(QLabel("回零状态:"))
         self._eng_home_state_label = QLabel("就绪")
         self._eng_home_state_label.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #d4d4d4;
+            font-size: 13px; font-weight: bold; color: #d4d4d4;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 3px; padding: 2px 8px;
+            border-radius: 3px; padding: 1px 6px;
         """)
         home_status_layout.addWidget(self._eng_home_state_label, 1)
         home_layout.addLayout(home_status_layout)
@@ -1206,7 +1213,7 @@ class MainWindow(QMainWindow):
             QProgressBar {
                 background-color: #1e1e1e; border: 1px solid #444;
                 border-radius: 3px; text-align: center; color: #d4d4d4;
-                height: 18px;
+                height: 14px;
             }
             QProgressBar::chunk {
                 background-color: #4caf50; border-radius: 2px;
@@ -1216,14 +1223,14 @@ class MainWindow(QMainWindow):
 
         # 回零按钮行
         home_btn_layout = QHBoxLayout()
-        home_btn_layout.setSpacing(6)
+        home_btn_layout.setSpacing(4)
 
         self._eng_btn_home_start = QPushButton("开始回零")
         self._eng_btn_home_start.setStyleSheet("""
             QPushButton {
                 background-color: #1a3a5c; color: #4A90D9;
-                padding: 6px 16px; border: 1px solid #2a5a8c;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 10px; border: 1px solid #2a5a8c;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #2a4a7c; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
@@ -1234,8 +1241,8 @@ class MainWindow(QMainWindow):
         self._eng_btn_home_stop.setStyleSheet("""
             QPushButton {
                 background-color: #E65100; color: #fff;
-                padding: 6px 16px; border: 1px solid #FF6D00;
-                border-radius: 3px; font-weight: bold;
+                padding: 3px 10px; border: 1px solid #FF6D00;
+                border-radius: 3px; font-weight: bold; font-size: 12px;
             }
             QPushButton:hover { background-color: #BF360C; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
@@ -1245,8 +1252,8 @@ class MainWindow(QMainWindow):
         self._eng_btn_home_set_zero.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c; color: #d4d4d4;
-                padding: 6px 16px; border: 1px solid #555;
-                border-radius: 3px;
+                padding: 3px 10px; border: 1px solid #555;
+                border-radius: 3px; font-size: 12px;
             }
             QPushButton:hover { background-color: #4a4a4a; }
         """)
@@ -2213,8 +2220,8 @@ class MainWindow(QMainWindow):
         if self._camera_panel is not None and self._camera_panel.is_camera_open():
             dialog = QDialog(self)
             dialog.setWindowTitle("相机设置 - 参数调节")
-            dialog.setMinimumWidth(700)
-            dialog.setMinimumHeight(550)
+            dialog.setMinimumWidth(600)
+            dialog.setMinimumHeight(450)
 
             layout = QVBoxLayout(dialog)
             # 创建新的 CameraPanel 共享 camera_mgr，用于参数调节界面
@@ -2241,8 +2248,8 @@ class MainWindow(QMainWindow):
 
         dialog = QDialog(self)
         dialog.setWindowTitle("相机控制")
-        dialog.setMinimumWidth(700)
-        dialog.setMinimumHeight(550)
+        dialog.setMinimumWidth(600)
+        dialog.setMinimumHeight(450)
 
         layout = QVBoxLayout(dialog)
         # 创建一个临时面板用于对话框，不赋值给 self._camera_panel
@@ -3186,8 +3193,8 @@ class ProductConfigDialog(QDialog):
         self._config = None
 
         self.setWindowTitle("新建产品配置" if mode == "new" else f"编辑产品 - {product_name}")
-        self.setMinimumSize(800, 700)
-        self.resize(900, 750)
+        self.setMinimumSize(640, 520)
+        self.resize(780, 600)
         self.setStyleSheet("""
             QDialog { background-color: #2d2d2d; }
             QLabel { color: #d4d4d4; font-size: 15px; }

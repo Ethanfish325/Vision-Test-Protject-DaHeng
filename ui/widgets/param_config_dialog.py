@@ -23,12 +23,12 @@ class ParamConfigDialog(QDialog):
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
     """
     BTN_OK_STYLE = """
-        QPushButton { background-color: #1976D2; color: #fff; font-size: 17px;
-                     font-weight: bold; padding: 6px 22px; border: none; border-radius: 3px; }
+        QPushButton { background-color: #1976D2; color: #fff; font-size: 13px;
+                     font-weight: bold; padding: 4px 14px; border: none; border-radius: 3px; }
         QPushButton:hover { background-color: #1565C0; }
     """
     BTN_CANCEL_STYLE = """
-        QPushButton { background-color: #3c3c3c; color: #d4d4d4; padding: 8px 20px;
+        QPushButton { background-color: #3c3c3c; color: #d4d4d4; padding: 4px 14px;
                      border: 1px solid #555; border-radius: 3px; }
         QPushButton:hover { background-color: #4a4a4a; }
     """
@@ -40,9 +40,9 @@ class ParamConfigDialog(QDialog):
         self.preview_image = preview_image
         self.context_info = context_info or {"regions": []}
         self.setWindowTitle(f"参数配置 - {tool.display_name}")
-        self.setMinimumWidth(960)
-        self.setMinimumHeight(600)
-        self.resize(1200, 720)
+        self.setMinimumWidth(800)
+        self.setMinimumHeight(500)
+        self.resize(960, 600)
         # 防抖定时器：参数修改后延迟 300ms 自动预览
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)

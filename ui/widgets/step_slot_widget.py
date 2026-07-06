@@ -32,7 +32,7 @@ class StepSlot(QFrame):
         self._is_hovered = False
         self.setAcceptDrops(True)
         self.setFrameShape(QFrame.NoFrame)
-        self.setMinimumHeight(56)
+        self.setMinimumHeight(40)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._setup_ui()
         self._update_empty_style()
@@ -40,39 +40,39 @@ class StepSlot(QFrame):
 
     def _setup_ui(self):
         self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(12, 8, 12, 8)
-        self._layout.setSpacing(10)
+        self._layout.setContentsMargins(8, 4, 8, 4)
+        self._layout.setSpacing(6)
 
         # 序号标签
         self._index_label = QLabel(str(self._slot_index + 1))
-        self._index_label.setFixedSize(28, 28)
+        self._index_label.setFixedSize(22, 22)
         self._index_label.setAlignment(Qt.AlignCenter)
         self._index_label.setStyleSheet("""
             QLabel {
                 background-color: #3c3c3c;
                 color: #999;
-                border-radius: 14px;
+                border-radius: 11px;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 12px;
             }
         """)
         self._layout.addWidget(self._index_label)
 
         # 图标标签
         self._icon_label = QLabel()
-        self._icon_label.setFixedSize(32, 32)
+        self._icon_label.setFixedSize(24, 24)
         self._icon_label.setAlignment(Qt.AlignCenter)
-        self._icon_label.setStyleSheet("font-size: 22px;")
+        self._icon_label.setStyleSheet("font-size: 16px;")
         self._layout.addWidget(self._icon_label)
 
         # 名称标签
         self._name_label = QLabel("拖入算子")
-        self._name_label.setStyleSheet("color: #888; font-size: 15px;")
+        self._name_label.setStyleSheet("color: #888; font-size: 12px;")
         self._layout.addWidget(self._name_label, 1)
 
         # 启用按钮
         self._enable_btn = QPushButton()
-        self._enable_btn.setFixedSize(32, 32)
+        self._enable_btn.setFixedSize(24, 24)
         self._enable_btn.setCheckable(True)
         self._enable_btn.setChecked(True)
         self._enable_btn.setCursor(QCursor(Qt.PointingHandCursor))
@@ -82,16 +82,16 @@ class StepSlot(QFrame):
 
         # 删除按钮
         self._delete_btn = QPushButton()
-        self._delete_btn.setFixedSize(32, 32)
+        self._delete_btn.setFixedSize(24, 24)
         self._delete_btn.setCursor(QCursor(Qt.PointingHandCursor))
         self._delete_btn.setStyleSheet("""
             QPushButton {
                 background: #4a2020;
                 border: 1px solid #ff5252;
                 color: #ff5252;
-                font-size: 18px;
+                font-size: 14px;
                 font-weight: bold;
-                border-radius: 16px;
+                border-radius: 12px;
             }
             QPushButton:hover {
                 background: #5a2a2a;
@@ -118,8 +118,8 @@ class StepSlot(QFrame):
         self.setStyleSheet("""
             StepSlot {
                 background: #2d2d2d;
-                border: 2px dashed #555;
-                border-radius: 10px;
+                border: 1px dashed #555;
+                border-radius: 6px;
             }
             StepSlot:hover {
                 border-color: #4A90D9;
@@ -134,8 +134,8 @@ class StepSlot(QFrame):
         self.setStyleSheet(f"""
             StepSlot {{
                 background: #2d2d2d;
-                border: 2px solid {border_color};
-                border-radius: 10px;
+                border: 1px solid {border_color};
+                border-radius: 6px;
             }}
             StepSlot:hover {{
                 background: #353535;
@@ -164,22 +164,22 @@ class StepSlot(QFrame):
         self._name_label.setText(display)
         self._name_label.setStyleSheet(f"""
             font-weight: 600;
-            font-size: 16px;
+            font-size: 13px;
             color: {color.name()};
         """)
 
         # 更新图标标签
         self._icon_label.setText(CATEGORY_ICONS.get(category, ""))
-        self._icon_label.setStyleSheet(f"font-size: 24px; color: {color.name()};")
+        self._icon_label.setStyleSheet(f"font-size: 18px; color: {color.name()};")
 
         # 更新序号标签颜色
         self._index_label.setStyleSheet(f"""
             QLabel {{
                 background-color: {color.name()};
                 color: white;
-                border-radius: 14px;
+                border-radius: 11px;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 12px;
             }}
         """)
 
@@ -196,16 +196,16 @@ class StepSlot(QFrame):
         self._enabled = True
         self._is_occupied = False
         self._name_label.setText("拖入算子")
-        self._name_label.setStyleSheet("color: #888; font-size: 15px;")
+        self._name_label.setStyleSheet("color: #888; font-size: 12px;")
         self._icon_label.setText("")
         self._icon_label.setStyleSheet("")
         self._index_label.setStyleSheet("""
             QLabel {
                 background-color: #3c3c3c;
                 color: #999;
-                border-radius: 14px;
+                border-radius: 11px;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 12px;
             }
         """)
         self._enable_btn.setVisible(False)
@@ -225,8 +225,8 @@ class StepSlot(QFrame):
                     background: #4CAF50;
                     color: white;
                     border: 1px solid #66BB6A;
-                    border-radius: 16px;
-                    font-size: 18px;
+                    border-radius: 12px;
+                    font-size: 14px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
@@ -243,8 +243,8 @@ class StepSlot(QFrame):
                     background: #555;
                     color: #ccc;
                     border: 1px solid #777;
-                    border-radius: 16px;
-                    font-size: 18px;
+                    border-radius: 12px;
+                    font-size: 14px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
@@ -395,21 +395,21 @@ class StepSlotWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         # 标题区域
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(6)
+        header_layout.setSpacing(4)
         
         header_icon = QLabel("📋")
-        header_icon.setStyleSheet("font-size: 18px;")
+        header_icon.setStyleSheet("font-size: 14px;")
         header_layout.addWidget(header_icon)
         
         header = QLabel("步骤列表")
         header.setStyleSheet("""
-            font-size: 17px;
+            font-size: 13px;
             font-weight: bold;
             color: #d4d4d4;
             padding: 0;
@@ -419,17 +419,17 @@ class StepSlotWidget(QWidget):
 
         # 添加步骤按钮
         self._btn_add_step = QPushButton("+ 添加步骤")
-        self._btn_add_step.setFixedHeight(32)
+        self._btn_add_step.setFixedHeight(26)
         self._btn_add_step.setCursor(QCursor(Qt.PointingHandCursor))
         self._btn_add_step.setStyleSheet("""
             QPushButton {
                 background: #1a3a5c;
                 color: #4A90D9;
                 border: 1px solid #2a5a8c;
-                border-radius: 4px;
-                font-size: 15px;
+                border-radius: 3px;
+                font-size: 12px;
                 font-weight: bold;
-                padding: 2px 12px;
+                padding: 1px 8px;
             }
             QPushButton:hover {
                 background: #2a4a7c;
@@ -455,13 +455,13 @@ class StepSlotWidget(QWidget):
             }
             QScrollBar:vertical {
                 background: #2d2d2d;
-                width: 8px;
-                border-radius: 4px;
+                width: 6px;
+                border-radius: 3px;
             }
             QScrollBar::handle:vertical {
                 background: #555;
-                border-radius: 4px;
-                min-height: 30px;
+                border-radius: 3px;
+                min-height: 20px;
             }
             QScrollBar::handle:vertical:hover {
                 background: #777;
@@ -474,8 +474,8 @@ class StepSlotWidget(QWidget):
         self._container = QWidget()
         self._container.setStyleSheet("background-color: transparent;")
         self._container_layout = QVBoxLayout(self._container)
-        self._container_layout.setContentsMargins(4, 4, 4, 4)
-        self._container_layout.setSpacing(8)
+        self._container_layout.setContentsMargins(2, 2, 2, 2)
+        self._container_layout.setSpacing(4)
         self._container_layout.addStretch()
 
         scroll.setWidget(self._container)

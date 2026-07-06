@@ -43,33 +43,33 @@ class PositionResultWidget(QFrame):
         self.setStyleSheet("""
             QFrame {
                 background-color: #1e1e1e;
-                border: 2px solid #444;
-                border-radius: 6px;
+                border: 1px solid #444;
+                border-radius: 4px;
             }
         """)
-        self.setMinimumSize(320, 280)
+        self.setMinimumSize(200, 160)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 3, 4, 3)
+        layout.setSpacing(2)
 
         # 标题栏：位置名称 + 结果状态
         title_bar = QHBoxLayout()
-        title_bar.setSpacing(8)
+        title_bar.setSpacing(4)
 
         self._name_label = QLabel(self._position_name)
         self._name_label.setStyleSheet("""
-            font-size: 18px; font-weight: bold; color: #d4d4d4;
+            font-size: 13px; font-weight: bold; color: #d4d4d4;
             border: none; background: transparent;
         """)
 
         self._result_label = QLabel("等待检测")
         self._result_label.setAlignment(Qt.AlignCenter)
         self._result_label.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #666;
+            font-size: 12px; font-weight: bold; color: #666;
             background-color: #2d2d2d; border: 1px solid #444;
-            border-radius: 4px; padding: 2px 12px;
-            min-width: 60px;
+            border-radius: 3px; padding: 1px 8px;
+            min-width: 40px;
         """)
 
         title_bar.addWidget(self._name_label)
@@ -80,12 +80,12 @@ class PositionResultWidget(QFrame):
         # 图像显示区
         self._image_label = QLabel("等待检测...")
         self._image_label.setAlignment(Qt.AlignCenter)
-        self._image_label.setMinimumSize(300, 220)
+        self._image_label.setMinimumSize(180, 120)
         self._image_label.setStyleSheet("""
             QLabel {
                 background-color: #0d0d0d; border: 1px solid #333;
-                border-radius: 4px; color: #555;
-                font-size: 16px;
+                border-radius: 3px; color: #555;
+                font-size: 13px;
             }
         """)
         self._image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -94,7 +94,7 @@ class PositionResultWidget(QFrame):
         # 消息栏
         self._message_label = QLabel("")
         self._message_label.setStyleSheet("""
-            font-size: 14px; color: #999;
+            font-size: 11px; color: #999;
             border: none; background: transparent;
         """)
         self._message_label.setWordWrap(True)
@@ -106,31 +106,31 @@ class PositionResultWidget(QFrame):
         if result.passed:
             self._result_label.setText("OK")
             self._result_label.setStyleSheet("""
-                font-size: 16px; font-weight: bold; color: #66BB6A;
+                font-size: 12px; font-weight: bold; color: #66BB6A;
                 background-color: #1a3a1a; border: 1px solid #4CAF50;
-                border-radius: 4px; padding: 2px 12px;
-                min-width: 60px;
+                border-radius: 3px; padding: 1px 8px;
+                min-width: 40px;
             """)
             self.setStyleSheet("""
                 QFrame {
                     background-color: #1e2a1e;
-                    border: 2px solid #2E7D32;
-                    border-radius: 6px;
+                    border: 1px solid #2E7D32;
+                    border-radius: 4px;
                 }
             """)
         else:
             self._result_label.setText("NG")
             self._result_label.setStyleSheet("""
-                font-size: 16px; font-weight: bold; color: #EF5350;
+                font-size: 12px; font-weight: bold; color: #EF5350;
                 background-color: #2a1a1a; border: 1px solid #C62828;
-                border-radius: 4px; padding: 2px 12px;
-                min-width: 60px;
+                border-radius: 3px; padding: 1px 8px;
+                min-width: 40px;
             """)
             self.setStyleSheet("""
                 QFrame {
                     background-color: #2a1e1e;
-                    border: 2px solid #C62828;
-                    border-radius: 6px;
+                    border: 1px solid #C62828;
+                    border-radius: 4px;
                 }
             """)
 
@@ -147,16 +147,16 @@ class PositionResultWidget(QFrame):
         """显示等待状态"""
         self._result_label.setText("等待检测")
         self._result_label.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #666;
+            font-size: 12px; font-weight: bold; color: #666;
             background-color: #2d2d2d; border: 1px solid #444;
-            border-radius: 4px; padding: 2px 12px;
-            min-width: 60px;
+            border-radius: 3px; padding: 1px 8px;
+            min-width: 40px;
         """)
         self.setStyleSheet("""
             QFrame {
                 background-color: #1e1e1e;
-                border: 2px solid #444;
-                border-radius: 6px;
+                border: 1px solid #444;
+                border-radius: 4px;
             }
         """)
         self._image_label.setText("等待检测...")
@@ -168,8 +168,8 @@ class PositionResultWidget(QFrame):
         self._image_label.setStyleSheet("""
             QLabel {
                 background-color: #0d0d0d; border: 1px solid #4A90D9;
-                border-radius: 4px; color: #4A90D9;
-                font-size: 20px;
+                border-radius: 3px; color: #4A90D9;
+                font-size: 14px;
             }
         """)
 
@@ -179,8 +179,8 @@ class PositionResultWidget(QFrame):
         self._image_label.setStyleSheet("""
             QLabel {
                 background-color: #0d0d0d; border: 1px solid #FFA000;
-                border-radius: 4px; color: #FFA000;
-                font-size: 20px;
+                border-radius: 3px; color: #FFA000;
+                font-size: 14px;
             }
         """)
 
@@ -254,26 +254,26 @@ class InspectionPanel(QWidget):
     def _setup_ui(self):
         """构建 UI"""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 8, 12, 8)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(6, 4, 6, 4)
+        main_layout.setSpacing(4)
 
         # ── 顶部控制栏 ──
         top_bar = QWidget()
-        top_bar.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 4px;")
+        top_bar.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 3px;")
         top_layout = QHBoxLayout(top_bar)
-        top_layout.setContentsMargins(12, 6, 12, 6)
-        top_layout.setSpacing(12)
+        top_layout.setContentsMargins(8, 3, 8, 3)
+        top_layout.setSpacing(8)
 
         # 产品选择
         product_label = QLabel("产品型号:")
-        product_label.setStyleSheet("font-size: 17px; color: #d4d4d4; font-weight: bold; border: none;")
+        product_label.setStyleSheet("font-size: 13px; color: #d4d4d4; font-weight: bold; border: none;")
 
         self._product_combo = QComboBox()
-        self._product_combo.setMinimumWidth(180)
+        self._product_combo.setMinimumWidth(120)
         self._product_combo.setStyleSheet("""
             QComboBox {
                 background-color: #3c3c3c; color: #d4d4d4; border: 1px solid #555;
-                padding: 4px 8px; border-radius: 3px; font-size: 16px;
+                padding: 2px 6px; border-radius: 3px; font-size: 12px;
             }
             QComboBox::drop-down { border: none; }
             QComboBox QAbstractItemView {
@@ -286,36 +286,32 @@ class InspectionPanel(QWidget):
         top_layout.addWidget(self._product_combo)
 
         # 状态显示
-        top_layout.addSpacing(20)
-
         state_label = QLabel("状态:")
-        state_label.setStyleSheet("font-size: 17px; color: #d4d4d4; font-weight: bold; border: none;")
+        state_label.setStyleSheet("font-size: 13px; color: #d4d4d4; font-weight: bold; border: none;")
 
         self._state_display = QLabel("空闲")
         self._state_display.setAlignment(Qt.AlignCenter)
-        self._state_display.setMinimumWidth(140)
+        self._state_display.setMinimumWidth(100)
         self._state_display.setStyleSheet("""
-            font-size: 18px; font-weight: bold; color: #666;
+            font-size: 14px; font-weight: bold; color: #666;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 4px; padding: 4px 12px;
+            border-radius: 3px; padding: 2px 8px;
         """)
 
         top_layout.addWidget(state_label)
         top_layout.addWidget(self._state_display)
 
         # 最终结果
-        top_layout.addSpacing(10)
-
         result_label = QLabel("结果:")
-        result_label.setStyleSheet("font-size: 17px; color: #d4d4d4; font-weight: bold; border: none;")
+        result_label.setStyleSheet("font-size: 13px; color: #d4d4d4; font-weight: bold; border: none;")
 
         self._final_result_label = QLabel("--")
         self._final_result_label.setAlignment(Qt.AlignCenter)
-        self._final_result_label.setMinimumWidth(80)
+        self._final_result_label.setMinimumWidth(60)
         self._final_result_label.setStyleSheet("""
-            font-size: 22px; font-weight: bold; color: #666;
-            background-color: #1e1e1e; border: 2px solid #444;
-            border-radius: 6px; padding: 4px 16px;
+            font-size: 16px; font-weight: bold; color: #666;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 4px; padding: 2px 10px;
         """)
 
         top_layout.addWidget(result_label)
@@ -324,37 +320,37 @@ class InspectionPanel(QWidget):
 
         # 控制按钮
         self._btn_start = QPushButton("▶ 启动监听")
-        self._btn_start.setMinimumHeight(36)
+        self._btn_start.setMinimumHeight(28)
         self._btn_start.setStyleSheet("""
             QPushButton {
-                background-color: #2E7D32; color: #fff; font-size: 17px;
-                font-weight: bold; padding: 4px 16px;
-                border: 1px solid #4CAF50; border-radius: 4px;
+                background-color: #2E7D32; color: #fff; font-size: 13px;
+                font-weight: bold; padding: 2px 10px;
+                border: 1px solid #4CAF50; border-radius: 3px;
             }
             QPushButton:hover { background-color: #388E3C; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
         """)
 
         self._btn_stop = QPushButton("⏹ 停止")
-        self._btn_stop.setMinimumHeight(36)
+        self._btn_stop.setMinimumHeight(28)
         self._btn_stop.setEnabled(False)
         self._btn_stop.setStyleSheet("""
             QPushButton {
-                background-color: #C62828; color: #fff; font-size: 17px;
-                font-weight: bold; padding: 4px 16px;
-                border: 1px solid #EF5350; border-radius: 4px;
+                background-color: #C62828; color: #fff; font-size: 13px;
+                font-weight: bold; padding: 2px 10px;
+                border: 1px solid #EF5350; border-radius: 3px;
             }
             QPushButton:hover { background-color: #D32F2F; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
         """)
 
         self._btn_reset = QPushButton("↺ 复位")
-        self._btn_reset.setMinimumHeight(36)
+        self._btn_reset.setMinimumHeight(28)
         self._btn_reset.setStyleSheet("""
             QPushButton {
-                background-color: #E65100; color: #fff; font-size: 17px;
-                font-weight: bold; padding: 4px 16px;
-                border: 1px solid #FF6D00; border-radius: 4px;
+                background-color: #E65100; color: #fff; font-size: 13px;
+                font-weight: bold; padding: 2px 10px;
+                border: 1px solid #FF6D00; border-radius: 3px;
             }
             QPushButton:hover { background-color: #BF360C; }
             QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
@@ -368,29 +364,29 @@ class InspectionPanel(QWidget):
 
         # ── 统计信息栏 ──
         stats_bar = QWidget()
-        stats_bar.setStyleSheet("background-color: #252525; border: 1px solid #444; border-radius: 4px;")
+        stats_bar.setStyleSheet("background-color: #252525; border: 1px solid #444; border-radius: 3px;")
         stats_layout = QHBoxLayout(stats_bar)
-        stats_layout.setContentsMargins(12, 4, 12, 4)
-        stats_layout.setSpacing(20)
+        stats_layout.setContentsMargins(8, 2, 8, 2)
+        stats_layout.setSpacing(12)
 
         self._trigger_count_label = QLabel("触发: 0")
-        self._trigger_count_label.setStyleSheet("font-size: 16px; color: #4fc3f7; font-weight: bold; border: none;")
+        self._trigger_count_label.setStyleSheet("font-size: 13px; color: #4fc3f7; font-weight: bold; border: none;")
 
         self._ok_count_label = QLabel("OK: 0")
-        self._ok_count_label.setStyleSheet("font-size: 16px; color: #66BB6A; font-weight: bold; border: none;")
+        self._ok_count_label.setStyleSheet("font-size: 13px; color: #66BB6A; font-weight: bold; border: none;")
 
         self._ng_count_label = QLabel("NG: 0")
-        self._ng_count_label.setStyleSheet("font-size: 16px; color: #EF5350; font-weight: bold; border: none;")
+        self._ng_count_label.setStyleSheet("font-size: 13px; color: #EF5350; font-weight: bold; border: none;")
 
         # 一次检测总耗时显示
         self._total_elapsed_label = QLabel("耗时: --")
         self._total_elapsed_label.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #CE93D8;
+            font-size: 13px; font-weight: bold; color: #CE93D8;
             border: none;
         """)
 
         self._product_name_label = QLabel("当前产品: 未选择")
-        self._product_name_label.setStyleSheet("font-size: 16px; color: #d4d4d4; font-weight: bold; border: none;")
+        self._product_name_label.setStyleSheet("font-size: 13px; color: #d4d4d4; font-weight: bold; border: none;")
 
         stats_layout.addWidget(self._trigger_count_label)
         stats_layout.addWidget(self._ok_count_label)
@@ -418,30 +414,30 @@ class InspectionPanel(QWidget):
 
         self._grid_container = QWidget()
         self._grid_layout = QGridLayout(self._grid_container)
-        self._grid_layout.setContentsMargins(4, 4, 4, 4)
-        self._grid_layout.setSpacing(8)
+        self._grid_layout.setContentsMargins(2, 2, 2, 2)
+        self._grid_layout.setSpacing(4)
 
         scroll_area.setWidget(self._grid_container)
 
         # 右侧: 日志面板
         right_panel = QWidget()
-        right_panel.setMinimumWidth(280)
-        right_panel.setMaximumWidth(350)
+        right_panel.setMinimumWidth(180)
+        right_panel.setMaximumWidth(250)
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(8, 0, 0, 0)
-        right_layout.setSpacing(4)
+        right_layout.setContentsMargins(4, 0, 0, 0)
+        right_layout.setSpacing(2)
 
         log_title = QLabel("执行日志")
-        log_title.setStyleSheet("font-size: 17px; font-weight: bold; color: #d4d4d4; padding: 2px 0;")
+        log_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #d4d4d4; padding: 1px 0;")
 
         self._log_text = QTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setStyleSheet("""
             QTextEdit {
                 background-color: #1e1e1e; color: #d4d4d4;
-                border: 1px solid #444; border-radius: 4px;
+                border: 1px solid #444; border-radius: 3px;
                 font-family: Consolas, 'Courier New', monospace;
-                font-size: 14px;
+                font-size: 11px;
             }
         """)
 
@@ -450,7 +446,7 @@ class InspectionPanel(QWidget):
 
         middle_splitter.addWidget(scroll_area)
         middle_splitter.addWidget(right_panel)
-        middle_splitter.setStretchFactor(0, 3)
+        middle_splitter.setStretchFactor(0, 4)
         middle_splitter.setStretchFactor(1, 1)
 
         main_layout.addWidget(middle_splitter, 1)
@@ -543,9 +539,9 @@ class InspectionPanel(QWidget):
         self._product_combo.setEnabled(False)
         self._final_result_label.setText("--")
         self._final_result_label.setStyleSheet("""
-            font-size: 22px; font-weight: bold; color: #666;
-            background-color: #1e1e1e; border: 2px solid #444;
-            border-radius: 6px; padding: 4px 16px;
+            font-size: 16px; font-weight: bold; color: #666;
+            background-color: #1e1e1e; border: 1px solid #444;
+            border-radius: 4px; padding: 2px 10px;
         """)
 
         # 重置所有位置显示
@@ -575,9 +571,9 @@ class InspectionPanel(QWidget):
         self._product_combo.setEnabled(True)
         self._state_display.setText("空闲")
         self._state_display.setStyleSheet("""
-            font-size: 18px; font-weight: bold; color: #666;
+            font-size: 14px; font-weight: bold; color: #666;
             background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 4px; padding: 4px 12px;
+            border-radius: 3px; padding: 2px 8px;
         """)
         self._append_log("已复位")
         self.reset_requested.emit()
@@ -657,9 +653,9 @@ class InspectionPanel(QWidget):
             border = "#444"
 
         self._state_display.setStyleSheet(f"""
-            font-size: 18px; font-weight: bold; color: {color};
+            font-size: 14px; font-weight: bold; color: {color};
             background-color: {bg}; border: 1px solid {border};
-            border-radius: 4px; padding: 4px 12px;
+            border-radius: 3px; padding: 2px 8px;
         """)
 
         # 更新日志
@@ -676,16 +672,16 @@ class InspectionPanel(QWidget):
         if final_ok:
             self._final_result_label.setText("OK")
             self._final_result_label.setStyleSheet("""
-                font-size: 22px; font-weight: bold; color: #66BB6A;
-                background-color: #1a3a1a; border: 2px solid #4CAF50;
-                border-radius: 6px; padding: 4px 16px;
+                font-size: 16px; font-weight: bold; color: #66BB6A;
+                background-color: #1a3a1a; border: 1px solid #4CAF50;
+                border-radius: 4px; padding: 2px 10px;
             """)
         else:
             self._final_result_label.setText("NG")
             self._final_result_label.setStyleSheet("""
-                font-size: 22px; font-weight: bold; color: #EF5350;
-                background-color: #2a1a1a; border: 2px solid #C62828;
-                border-radius: 6px; padding: 4px 16px;
+                font-size: 16px; font-weight: bold; color: #EF5350;
+                background-color: #2a1a1a; border: 1px solid #C62828;
+                border-radius: 4px; padding: 2px 10px;
             """)
 
         total = len(results)
@@ -705,27 +701,27 @@ class InspectionPanel(QWidget):
         # 构建确认对话框
         dialog = QDialog(self)
         dialog.setWindowTitle("⚠️ NG 检测结果 - 请手工确认")
-        dialog.setMinimumSize(700, 500)
+        dialog.setMinimumSize(600, 400)
         dialog.setStyleSheet("""
             QDialog { background-color: #2d2d2d; }
-            QLabel { color: #d4d4d4; font-size: 16px; }
+            QLabel { color: #d4d4d4; font-size: 13px; }
             QPushButton {
-                font-size: 20px; font-weight: bold; padding: 12px 40px;
-                border-radius: 8px; min-width: 140px;
+                font-size: 15px; font-weight: bold; padding: 8px 24px;
+                border-radius: 6px; min-width: 100px;
             }
         """)
 
         layout = QVBoxLayout(dialog)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 8, 12, 8)
 
         # 标题
         title_label = QLabel("⚠️ 检测结果为 NG，请确认最终判定结果")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("""
-            font-size: 22px; font-weight: bold; color: #EF5350;
-            background-color: #2a1a1a; border: 2px solid #C62828;
-            border-radius: 8px; padding: 12px;
+            font-size: 16px; font-weight: bold; color: #EF5350;
+            background-color: #2a1a1a; border: 1px solid #C62828;
+            border-radius: 6px; padding: 8px;
         """)
         layout.addWidget(title_label)
 
@@ -736,9 +732,9 @@ class InspectionPanel(QWidget):
         stats_label = QLabel(f"总位置: {total}  |  OK: {ok_count}  |  NG: {ng_count}")
         stats_label.setAlignment(Qt.AlignCenter)
         stats_label.setStyleSheet("""
-            font-size: 18px; color: #d4d4d4; padding: 6px;
+            font-size: 14px; color: #d4d4d4; padding: 4px;
             background-color: #252525; border: 1px solid #444;
-            border-radius: 4px;
+            border-radius: 3px;
         """)
         layout.addWidget(stats_label)
 
@@ -746,7 +742,7 @@ class InspectionPanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("""
-            QScrollArea { border: 1px solid #444; border-radius: 4px;
+            QScrollArea { border: 1px solid #444; border-radius: 3px;
                           background-color: #1e1e1e; }
             QScrollBar:vertical { width: 6px; background: #2d2d2d; }
             QScrollBar::handle:vertical { background: #555; border-radius: 3px; }
@@ -754,8 +750,8 @@ class InspectionPanel(QWidget):
 
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setSpacing(8)
-        scroll_layout.setContentsMargins(8, 8, 8, 8)
+        scroll_layout.setSpacing(4)
+        scroll_layout.setContentsMargins(4, 4, 4, 4)
 
         for i, r in enumerate(results):
             # 每个位置的结果卡片
@@ -763,26 +759,26 @@ class InspectionPanel(QWidget):
             card.setStyleSheet(f"""
                 QFrame {{
                     background-color: {'#1a2a1a' if r.passed else '#2a1a1a'};
-                    border: 2px solid {'#2E7D32' if r.passed else '#C62828'};
-                    border-radius: 6px;
+                    border: 1px solid {'#2E7D32' if r.passed else '#C62828'};
+                    border-radius: 4px;
                 }}
             """)
             card_layout = QVBoxLayout(card)
-            card_layout.setSpacing(4)
-            card_layout.setContentsMargins(10, 6, 10, 6)
+            card_layout.setSpacing(2)
+            card_layout.setContentsMargins(6, 3, 6, 3)
 
             # 位置名称 + 结果
             header = QHBoxLayout()
             name_label = QLabel(f"📍 位置 {i + 1}: {r.name}")
-            name_label.setStyleSheet("font-size: 17px; font-weight: bold; color: #d4d4d4; border: none;")
+            name_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #d4d4d4; border: none;")
             result_text = "OK" if r.passed else "NG"
             result_color = "#66BB6A" if r.passed else "#EF5350"
             result_label = QLabel(result_text)
             result_label.setAlignment(Qt.AlignCenter)
             result_label.setStyleSheet(f"""
-                font-size: 18px; font-weight: bold; color: {result_color};
+                font-size: 14px; font-weight: bold; color: {result_color};
                 background-color: #1e1e1e; border: 1px solid {result_color};
-                border-radius: 4px; padding: 2px 16px; min-width: 50px;
+                border-radius: 3px; padding: 1px 10px; min-width: 40px;
             """)
             header.addWidget(name_label)
             header.addStretch()
@@ -792,13 +788,13 @@ class InspectionPanel(QWidget):
             # 消息
             if r.message:
                 msg_label = QLabel(f"消息: {r.message}")
-                msg_label.setStyleSheet("font-size: 14px; color: #999; border: none;")
+                msg_label.setStyleSheet("font-size: 11px; color: #999; border: none;")
                 msg_label.setWordWrap(True)
                 card_layout.addWidget(msg_label)
 
             # 耗时
             time_label = QLabel(f"耗时: {r.elapsed_ms:.1f}ms")
-            time_label.setStyleSheet("font-size: 14px; color: #888; border: none;")
+            time_label.setStyleSheet("font-size: 11px; color: #888; border: none;")
             card_layout.addWidget(time_label)
 
             scroll_layout.addWidget(card)
@@ -809,27 +805,27 @@ class InspectionPanel(QWidget):
 
         # 按钮区域
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(20)
+        btn_layout.setSpacing(12)
 
         btn_ok = QPushButton("✓ 确认为 OK")
         btn_ok.setStyleSheet("""
             QPushButton {
                 background-color: #2E7D32; color: #fff;
-                border: 2px solid #4CAF50;
+                border: 1px solid #4CAF50;
             }
             QPushButton:hover { background-color: #388E3C; }
         """)
-        btn_ok.setMinimumHeight(50)
+        btn_ok.setMinimumHeight(36)
 
         btn_ng = QPushButton("✗ 确认为 NG")
         btn_ng.setStyleSheet("""
             QPushButton {
                 background-color: #C62828; color: #fff;
-                border: 2px solid #EF5350;
+                border: 1px solid #EF5350;
             }
             QPushButton:hover { background-color: #D32F2F; }
         """)
-        btn_ng.setMinimumHeight(50)
+        btn_ng.setMinimumHeight(36)
 
         btn_layout.addStretch()
         btn_layout.addWidget(btn_ok)
