@@ -194,10 +194,13 @@ class MainWindow(QMainWindow):
 
         self._camera_panel = None      # 相机面板，延迟创建
         self._pending_engineer_test = False  # 设计模式测试标记：拍照后自动执行流水线
-        self._pending_detect = False    # 生产模式标记：拍照后自动执行检测
+        # === COMMENTED OUT: 生产模式标记 ===
+        # self._pending_detect = False    # 生产模式标记：拍照后自动执行检测
+        # === END ===
 
-        # 生产模式最近一次检测的标注结果，用于实时预览时保持显示检测结果
-        self._last_annotated = None
+        # === COMMENTED OUT: 生产模式最近一次检测的标注结果 ===
+        # self._last_annotated = None
+        # === END ===
 
         # 用户角色与权限控制
         self._current_user_role = "engineer"   # 当前用户角色: operator / engineer / admin
@@ -247,13 +250,15 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         main_layout.addWidget(self.stack, 1)
 
-        self._build_worker_page()
+        # === COMMENTED OUT: 生产模式页面 ===
+        # self._build_worker_page()
+        # === END ===
 
         self._build_automation_page()
 
         self._build_engineer_page()
 
-        self.stack.setCurrentIndex(0)
+        self.stack.setCurrentIndex(0)  # 默认显示自动化模式（索引0）
 
         self.status_label = QLabel("就绪")
         self.scheme_status_label = QLabel("当前方案: 未选择")
@@ -271,24 +276,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 2, 10, 2)
         layout.setSpacing(8)
 
-        self.btn_worker_mode = QPushButton("🔧 生产模式")
-        self.btn_worker_mode.setCheckable(True)
-        self.btn_worker_mode.setChecked(True)
-        self.btn_worker_mode.setStyleSheet("""
-            QPushButton {
-                background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
-                border: 1px solid #555; border-radius: 3px; font-size: 18px;
-                font-weight: bold;
-            }
-            QPushButton:checked {
-                background-color: #1a3a5c; border: 1px solid #4A90D9;
-                color: #4A90D9;
-            }
-            QPushButton:hover { background-color: #4a4a4a; }
-        """)
+        # === COMMENTED OUT: 生产模式按钮 ===
+        # self.btn_worker_mode = QPushButton("🔧 生产模式")
+        # self.btn_worker_mode.setCheckable(True)
+        # self.btn_worker_mode.setChecked(True)
+        # self.btn_worker_mode.setStyleSheet("""
+        #     QPushButton {
+        #         background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
+        #         border: 1px solid #555; border-radius: 3px; font-size: 18px;
+        #         font-weight: bold;
+        #     }
+        #     QPushButton:checked {
+        #         background-color: #1a3a5c; border: 1px solid #4A90D9;
+        #         color: #4A90D9;
+        #     }
+        #     QPushButton:hover { background-color: #4a4a4a; }
+        # """)
+        # === END ===
 
         self.btn_automation_mode = QPushButton("🤖 自动化模式")
         self.btn_automation_mode.setCheckable(True)
+        self.btn_automation_mode.setChecked(True)  # 默认选中自动化模式
         self.btn_automation_mode.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c; color: #d4d4d4; padding: 4px 16px;
@@ -322,7 +330,9 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        layout.addWidget(self.btn_worker_mode)
+        # === COMMENTED OUT: 生产模式按钮 ===
+        # layout.addWidget(self.btn_worker_mode)
+        # === END ===
         layout.addWidget(self.btn_automation_mode)
         layout.addWidget(self.btn_engineer_mode)
         layout.addStretch()
@@ -332,27 +342,36 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.mode_scheme_label)
 
-        self.btn_worker_mode.clicked.connect(lambda: self._switch_mode(0))
-        self.btn_automation_mode.clicked.connect(lambda: self._switch_mode(1))
-        self.btn_engineer_mode.clicked.connect(lambda: self._switch_mode(2))
+        # === COMMENTED OUT: 生产模式按钮 ===
+        # self.btn_worker_mode.clicked.connect(lambda: self._switch_mode(0))
+        # === END ===
+        self.btn_automation_mode.clicked.connect(lambda: self._switch_mode(0))  # 索引变化：0=自动化模式
+        self.btn_engineer_mode.clicked.connect(lambda: self._switch_mode(1))     # 索引变化：1=设计模式
 
         parent_layout.addWidget(toolbar)
 
     def _switch_mode(self, index: int):
         # 如果尝试切换到设计模式但当前用户不是工程师/管理员，阻止切换
-        if index == 2 and self._current_user_role not in ("engineer", "admin"):
+        if index == 1 and self._current_user_role not in ("engineer", "admin"):  # 索引变化：1=设计模式
             QMessageBox.warning(self, "权限不足", "请先通过「用户」菜单登录工程师账号")
-            self.btn_worker_mode.setChecked(True)
-            self.btn_automation_mode.setChecked(False)
+            # === COMMENTED OUT: 生产模式按钮 ===
+            # self.btn_worker_mode.setChecked(True)
+            # === END ===
+            self.btn_automation_mode.setChecked(True)
             self.btn_engineer_mode.setChecked(False)
             return
 
         self.stack.setCurrentIndex(index)
-        self.btn_worker_mode.setChecked(index == 0)
-        self.btn_automation_mode.setChecked(index == 1)
-        self.btn_engineer_mode.setChecked(index == 2)
+        # === COMMENTED OUT: 生产模式按钮 ===
+        # self.btn_worker_mode.setChecked(index == 0)
+        # === END ===
+        self.btn_automation_mode.setChecked(index == 0)  # 索引变化：0=自动化模式
+        self.btn_engineer_mode.setChecked(index == 1)     # 索引变化：1=设计模式
 
-        mode_names = {0: "生产模式", 1: "自动化模式", 2: "设计模式"}
+        # === COMMENTED OUT: 生产模式 ===
+        # mode_names = {0: "生产模式", 1: "自动化模式", 2: "设计模式"}
+        # === END ===
+        mode_names = {0: "自动化模式", 1: "设计模式"}
         self.status_label.setText(mode_names.get(index, "未知模式"))
 
     # ──────────────── 用户登录 / 权限控制 ────────────────
@@ -455,265 +474,93 @@ class MainWindow(QMainWindow):
         self.btn_engineer_mode.setEnabled(is_engineer)
         self.act_logout.setEnabled(is_engineer)
 
-        # 如果当前在设计模式但角色不是工程师，自动切回生产模式
-        if not is_engineer and self.stack.currentIndex() == 1:
-            self._switch_mode(0)
+        # === COMMENTED OUT: 生产模式 ===
+        # 如果当前在设计模式但角色不是工程师，自动切回自动化模式
+        if not is_engineer and self.stack.currentIndex() == 1:  # 索引变化：1=设计模式
+            self._switch_mode(0)  # 0=自动化模式
+        # === END ===
 
         log_info(f"用户切换: {display_name}({role})")
 
     def _logout(self):
         """退出登录，回到操作员模式"""
         self._set_user_role("operator", "操作员")
-        self.status_label.setText("生产模式")
+        # === COMMENTED OUT: 生产模式 ===
+        # self.status_label.setText("生产模式")
+        # === END ===
+        self.status_label.setText("自动化模式")
 
     def _build_worker_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
-
-        top_bar = QWidget()
-        top_bar.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 4px;")
-        top_bar.setFixedHeight(60)
-        top_layout = QHBoxLayout(top_bar)
-        top_layout.setContentsMargins(12, 4, 12, 4)
-
-        self.worker_judge = QLabel("就绪")
-        self.worker_judge.setAlignment(Qt.AlignCenter)
-        self.worker_judge.setStyleSheet("""
-            font-size: 28px; font-weight: bold; padding: 6px 28px;
-            background-color: #1e1e1e; color: #666;
-            border: 2px solid #444; border-radius: 6px;
-            min-width: 160px;
-        """)
-        top_layout.addWidget(self.worker_judge)
-
-        # 总测试时间显示
-        self.worker_time_label = QLabel("")
-        self.worker_time_label.setAlignment(Qt.AlignCenter)
-        self.worker_time_label.setStyleSheet("""
-            font-size: 20px; font-weight: bold; color: #4fc3f7;
-            background-color: #1e1e1e; border: 1px solid #444;
-            border-radius: 4px; padding: 4px 12px;
-            min-width: 100px;
-        """)
-        top_layout.addWidget(self.worker_time_label)
-
-        top_layout.addSpacing(20)
-
-        info_widget = QWidget()
-        info_layout = QVBoxLayout(info_widget)
-        info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(2)
-
-        self.worker_scheme_label = QLabel("当前方案: 未选择")
-        self.worker_scheme_label.setStyleSheet("font-size: 20px; color: #d4d4d4; font-weight: bold;")
-        self.worker_status_label = QLabel("就绪 - 请加载图像或点击「开始检测」")
-        self.worker_status_label.setStyleSheet("font-size: 18px; color: #999;")
-
-        info_layout.addWidget(self.worker_scheme_label)
-        info_layout.addWidget(self.worker_status_label)
-
-        top_layout.addWidget(info_widget, 1)
-
-        layout.addWidget(top_bar)
-
-        middle_splitter = QSplitter(Qt.Horizontal)
-
-        image_panel = QWidget()
-        image_layout = QVBoxLayout(image_panel)
-        image_layout.setContentsMargins(0, 0, 0, 0)
-        image_layout.setSpacing(4)
-
-        image_title = QLabel("检测画面")
-        image_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #d4d4d4; padding: 2px 0;")
-
-        self.worker_display = ZoomableImageWidget("请加载图像或点击「开始检测」")
-        self.worker_display.setMinimumSize(640, 480)
-        self.worker_display.label.setStyleSheet("""
-            ZoomableLabel {
-                background-color: #0d0d0d; border: 2px solid #444;
-                border-radius: 4px;
-            }
-        """)
-
-        image_layout.addWidget(image_title)
-        image_layout.addWidget(self.worker_display, 1)
-
-        right_panel = QWidget()
-        right_panel.setMinimumWidth(240)
-        right_panel.setMaximumWidth(280)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(8, 0, 0, 0)
-        right_layout.setSpacing(0)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("""
-            QScrollArea { border: none; background: transparent; }
-            QScrollBar:vertical { width: 6px; background: #2d2d2d; }
-            QScrollBar::handle:vertical { background: #555; border-radius: 3px; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-        """)
-
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(0, 0, 4, 0)
-        scroll_layout.setSpacing(8)
-
-        btn_group = QWidget()
-        btn_group.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 4px;")
-        btn_layout = QVBoxLayout(btn_group)
-        btn_layout.setContentsMargins(12, 12, 12, 12)
-        btn_layout.setSpacing(10)
-
-        self.worker_btn_detect = QPushButton("📷 开始检测")
-        self.worker_btn_detect.setMinimumHeight(64)
-        self.worker_btn_detect.setEnabled(False)
-        self.worker_btn_detect.setStyleSheet("""
-            QPushButton {
-                background-color: #388E3C; color: #fff; font-size: 24px;
-                font-weight: bold; padding: 8px 16px;
-                border: 2px solid #4CAF50; border-radius: 8px;
-            }
-            QPushButton:hover { background-color: #2E7D32; border-color: #66BB6A; }
-            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
-        """)
-
-        btn_layout.addWidget(self.worker_btn_detect)
-
-        # ── 串口自动测试按钮 ──
-        self.worker_btn_auto_test = QPushButton("🔌 启动自动测试")
-        self.worker_btn_auto_test.setMinimumHeight(48)
-        self.worker_btn_auto_test.setEnabled(False)
-        self.worker_btn_auto_test.setCheckable(True)
-        self.worker_btn_auto_test.setStyleSheet("""
-            QPushButton {
-                background-color: #E65100; color: #fff; font-size: 20px;
-                font-weight: bold; padding: 6px 16px;
-                border: 2px solid #FF6D00; border-radius: 8px;
-            }
-            QPushButton:hover { background-color: #BF360C; border-color: #FF9100; }
-            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
-            QPushButton:checked {
-                background-color: #C62828; color: #fff;
-                border: 2px solid #EF5350;
-            }
-        """)
-        self.worker_btn_auto_test.setToolTip("通过串口接收下位机信号自动触发拍照检测")
-        btn_layout.addWidget(self.worker_btn_auto_test)
-
-        scheme_group = QWidget()
-        scheme_group.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 4px;")
-        scheme_layout = QVBoxLayout(scheme_group)
-        scheme_layout.setContentsMargins(12, 8, 12, 8)
-        scheme_layout.setSpacing(6)
-
-        scheme_title = QLabel("📂 方案选择")
-        scheme_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #d4d4d4; border: none;")
-
-        self.worker_scheme_list = QListWidget()
-        self.worker_scheme_list.setStyleSheet("""
-            QListWidget {
-                background-color: #2d2d2d; color: #d4d4d4;
-                border: 1px solid #444; border-radius: 3px;
-                font-size: 17px; padding: 2px;
-            }
-            QListWidget::item {
-                padding: 8px 10px; border-bottom: 1px solid #3a3a3a;
-            }
-            QListWidget::item:selected {
-                background-color: #1a3a5c; color: #4A90D9;
-            }
-            QListWidget::item:hover {
-                background-color: #3a3a3a;
-            }
-        """)
-        self.worker_scheme_list.setMinimumHeight(120)
-        self.worker_scheme_list.setMaximumHeight(180)
-
-        self.worker_btn_import_scheme = QPushButton("📥 导入方案")
-        self.worker_btn_import_scheme.setMinimumHeight(36)
-        self.worker_btn_import_scheme.setStyleSheet("""
-            QPushButton {
-                background-color: #3c3c3c; color: #b0b0b0; font-size: 18px;
-                padding: 4px 16px; border: 1px solid #555; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #4a4a4a; border-color: #777; }
-        """)
-
-        scheme_layout.addWidget(scheme_title)
-        scheme_layout.addWidget(self.worker_scheme_list, 1)
-        scheme_layout.addWidget(self.worker_btn_import_scheme)
-
-        self.worker_log = StepLogPanel()
-
-        scroll_layout.addWidget(btn_group)
-        scroll_layout.addWidget(scheme_group)
-        scroll_layout.addWidget(self.worker_log, 1)
-
-        scroll.setWidget(scroll_content)
-        right_layout.addWidget(scroll, 1)
-
-        middle_splitter.addWidget(image_panel)
-        middle_splitter.addWidget(right_panel)
-        middle_splitter.setStretchFactor(0, 4)
-        middle_splitter.setStretchFactor(1, 1)
-
-        layout.addWidget(middle_splitter, 1)
-
-        self.worker_btn_detect.clicked.connect(self._do_detect)
-        self.worker_btn_import_scheme.clicked.connect(self._import_worker_scheme)
-        self.worker_btn_auto_test.clicked.connect(self._toggle_auto_test)
-
-        self.stack.addWidget(page)
+        """生产模式页面 - 已注释，保留以方便后续恢复"""
+        pass
+        # === COMMENTED OUT: 生产模式页面 ===
+        # page = QWidget()
+        # layout = QVBoxLayout(page)
+        # layout.setContentsMargins(12, 8, 12, 8)
+        # layout.setSpacing(8)
+        #
+        # top_bar = QWidget()
+        # top_bar.setStyleSheet("background-color: #2d2d2d; border: 1px solid #444; border-radius: 4px;")
+        # top_bar.setFixedHeight(60)
+        # top_layout = QHBoxLayout(top_bar)
+        # top_layout.setContentsMargins(12, 4, 12, 4)
+        #
+        # self.worker_judge = QLabel("就绪")
+        # ...（整个方法体已注释）
+        # self.stack.addWidget(page)
+        # === END ===
 
     def _refresh_worker_scheme_list(self):
-        self.worker_scheme_list.clear()
-        os.makedirs(SCHEME_DIR, exist_ok=True)
-        for filename in sorted(os.listdir(SCHEME_DIR)):
-            if filename.endswith(".json"):
-                filepath = os.path.join(SCHEME_DIR, filename)
-                name = os.path.splitext(filename)[0]
-                item = QListWidgetItem(name)
-                item.setData(Qt.UserRole, filepath)
-                self.worker_scheme_list.addItem(item)
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # self.worker_scheme_list.clear()
+        # os.makedirs(SCHEME_DIR, exist_ok=True)
+        # for filename in sorted(os.listdir(SCHEME_DIR)):
+        #     if filename.endswith(".json"):
+        #         filepath = os.path.join(SCHEME_DIR, filename)
+        #         name = os.path.splitext(filename)[0]
+        #         item = QListWidgetItem(name)
+        #         item.setData(Qt.UserRole, filepath)
+        #         self.worker_scheme_list.addItem(item)
+        # === END ===
+        pass
 
     def _import_worker_scheme(self):
-        current_item = self.worker_scheme_list.currentItem()
-        if current_item is None:
-            QMessageBox.warning(self, "提示", "请先在列表中选择一个方案")
-            return
-
-        name = current_item.text()
-        filepath = current_item.data(Qt.UserRole)
-
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            pipeline = Pipeline.from_dict(data)
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载方案文件失败:\n{e}")
-            log_error(f"生产模式导入方案失败: {e}")
-            return
-
-        self.vision_engine.set_pipeline(pipeline)
-
-        self.worker_scheme_label.setText(f"当前方案: {name}")
-        self.worker_status_label.setText(f"已导入方案: {name}")
-        self.worker_status_label.setStyleSheet("font-size: 18px; color: #66BB6A;")
-        self.worker_btn_detect.setEnabled(True)
-
-        if name in self._schemes:
-            self.eng_scheme_combo.setCurrentText(name)
-        self._current_scheme_name = name
-        self.scheme_status_label.setText(f"当前方案: {name}")
-        self.mode_scheme_label.setText(f"当前方案: {name}")
-
-        log_info(f"生产模式导入方案: {name}")
-        QMessageBox.information(self, "成功", f"方案「{name}」已导入并应用")
-        self._update_auto_test_btn_state()
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # current_item = self.worker_scheme_list.currentItem()
+        # if current_item is None:
+        #     QMessageBox.warning(self, "提示", "请先在列表中选择一个方案")
+        #     return
+        #
+        # name = current_item.text()
+        # filepath = current_item.data(Qt.UserRole)
+        #
+        # try:
+        #     with open(filepath, 'r', encoding='utf-8') as f:
+        #         data = json.load(f)
+        #     pipeline = Pipeline.from_dict(data)
+        # except Exception as e:
+        #     QMessageBox.critical(self, "错误", f"加载方案文件失败:\n{e}")
+        #     log_error(f"生产模式导入方案失败: {e}")
+        #     return
+        #
+        # self.vision_engine.set_pipeline(pipeline)
+        #
+        # self.worker_scheme_label.setText(f"当前方案: {name}")
+        # self.worker_status_label.setText(f"已导入方案: {name}")
+        # self.worker_status_label.setStyleSheet("font-size: 18px; color: #66BB6A;")
+        # self.worker_btn_detect.setEnabled(True)
+        #
+        # if name in self._schemes:
+        #     self.eng_scheme_combo.setCurrentText(name)
+        # self._current_scheme_name = name
+        # self.scheme_status_label.setText(f"当前方案: {name}")
+        # self.mode_scheme_label.setText(f"当前方案: {name}")
+        #
+        # log_info(f"生产模式导入方案: {name}")
+        # QMessageBox.information(self, "成功", f"方案「{name}」已导入并应用")
+        # self._update_auto_test_btn_state()
+        # === END ===
+        log_info("_import_worker_scheme 已禁用（生产模式已移除）")
 
     # ──────────────── 自动化模式页面 ────────────────
 
@@ -2114,7 +1961,9 @@ class MainWindow(QMainWindow):
             self.vision_engine.set_pipeline(pipeline)
             self._current_scheme_name = default_name
             self.scheme_status_label.setText(f"当前方案: {default_name}")
-            self.worker_scheme_label.setText(f"当前方案: {default_name}")
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # self.worker_scheme_label.setText(f"当前方案: {default_name}")
+            # === END ===
             self.mode_scheme_label.setText(f"当前方案: {default_name}")
             self.status_label.setText(f"已自动加载方案: {default_name}")
             log_info(f"自动加载默认方案: {default_name}")
@@ -2127,7 +1976,9 @@ class MainWindow(QMainWindow):
         if pipeline is not None:
             self.pipeline_editor.set_pipeline(pipeline)
             self.scheme_status_label.setText(f"当前方案: {name}")
-            self.worker_scheme_label.setText(f"当前方案: {name}")
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # self.worker_scheme_label.setText(f"当前方案: {name}")
+            # === END ===
             self.mode_scheme_label.setText(f"当前方案: {name}")
 
     def _apply_selected_scheme(self):
@@ -2142,7 +1993,9 @@ class MainWindow(QMainWindow):
 
         self.vision_engine.set_pipeline(pipeline)
         self.scheme_status_label.setText(f"当前方案: {self._current_scheme_name}")
-        self.worker_scheme_label.setText(f"当前方案: {self._current_scheme_name}")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # self.worker_scheme_label.setText(f"当前方案: {self._current_scheme_name}")
+        # === END ===
         self.mode_scheme_label.setText(f"当前方案: {self._current_scheme_name}")
         self.status_label.setText(f"已应用方案: {self._current_scheme_name}")
         log_info(f"应用方案: {self._current_scheme_name}")
@@ -2235,7 +2088,9 @@ class MainWindow(QMainWindow):
 
         self._current_scheme_name = new_name
         self.scheme_status_label.setText(f"当前方案: {new_name}")
-        self.worker_scheme_label.setText(f"当前方案: {new_name}")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # self.worker_scheme_label.setText(f"当前方案: {new_name}")
+        # === END ===
         self.mode_scheme_label.setText(f"当前方案: {new_name}")
         log_info(f"重命名方案: {old_name} -> {new_name}")
         self._refresh_worker_scheme_list()
@@ -2415,9 +2270,11 @@ class MainWindow(QMainWindow):
         self.act_open_camera.setEnabled(True)
         self.act_close_camera.setEnabled(False)
         self.act_capture.setEnabled(False)
-        self.worker_btn_detect.setEnabled(False)
-        self.worker_display.clear_pixmap()
-        self.worker_display.label.setText("相机已关闭")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # self.worker_btn_detect.setEnabled(False)
+        # self.worker_display.clear_pixmap()
+        # self.worker_display.label.setText("相机已关闭")
+        # === END ===
         self._raw_image = None
         self.status_label.setText("相机已关闭")
 
@@ -2438,14 +2295,18 @@ class MainWindow(QMainWindow):
                 return
             self._raw_image = img
             self._raw_height, self._raw_width = img.shape[:2]
-            # 导入新图像，清除上一次的检测标注结果
-            self._last_annotated = None
-            display_img = self._overlay_roi_on_image(img)
-            self._show_worker_image(display_img)
-            self.worker_btn_detect.setEnabled(True)
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # # 导入新图像，清除上一次的检测标注结果
+            # self._last_annotated = None
+            # display_img = self._overlay_roi_on_image(img)
+            # self._show_worker_image(display_img)
+            # self.worker_btn_detect.setEnabled(True)
+            # === END ===
             self.act_capture.setEnabled(True)
             self.status_label.setText(f"已导入图像: {os.path.basename(filepath)}")
-            self.worker_status_label.setText(f"已导入图像: {os.path.basename(filepath)}")
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # self.worker_status_label.setText(f"已导入图像: {os.path.basename(filepath)}")
+            # === END ===
             log_info(f"导入图像: {filepath} ({self._raw_width}x{self._raw_height})")
         except Exception as e:
             log_error(f"导入图像失败: {e}")
@@ -2456,30 +2317,40 @@ class MainWindow(QMainWindow):
         self._raw_height = height
         self._raw_image = self._convert_to_cv(width, height, pixel_type, img_bytes)
         if self._raw_image is not None:
-            # 如果有最近一次检测的标注结果，优先显示它（保持检测结果可见）
-            if self._last_annotated is not None:
-                self._show_worker_image(self._last_annotated)
-            else:
-                # 实时预览时，如果已设置流水线，在原始图像上叠加 ROI 框
-                display_img = self._overlay_roi_on_image(self._raw_image)
-                self._show_worker_image(display_img)
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # # 如果有最近一次检测的标注结果，优先显示它（保持检测结果可见）
+            # if self._last_annotated is not None:
+            #     self._show_worker_image(self._last_annotated)
+            # else:
+            #     # 实时预览时，如果已设置流水线，在原始图像上叠加 ROI 框
+            #     display_img = self._overlay_roi_on_image(self._raw_image)
+            #     self._show_worker_image(display_img)
+            # === END ===
+            pass
 
     def _on_capture_completed(self, width, height, pixel_type, img_bytes):
         self._raw_width = width
         self._raw_height = height
         self._raw_image = self._convert_to_cv(width, height, pixel_type, img_bytes)
-        # 新拍照，清除上一次的检测标注结果
-        self._last_annotated = None
-        self.worker_btn_detect.setEnabled(True)
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # # 新拍照，清除上一次的检测标注结果
+        # self._last_annotated = None
+        # self.worker_btn_detect.setEnabled(True)
+        # === END ===
         self.act_capture.setEnabled(True)
         self.act_open_camera.setEnabled(False)
         self.act_close_camera.setEnabled(True)
         if self._raw_image is not None:
-            # 拍照完成后，如果已设置流水线，在原始图像上叠加 ROI 框
-            display_img = self._overlay_roi_on_image(self._raw_image)
-            self._show_worker_image(display_img)
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # # 拍照完成后，如果已设置流水线，在原始图像上叠加 ROI 框
+            # display_img = self._overlay_roi_on_image(self._raw_image)
+            # self._show_worker_image(display_img)
+            # === END ===
+            pass
         self.status_label.setText("拍照完成，可开始检测")
-        self.worker_status_label.setText("拍照完成，可开始检测")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # self.worker_status_label.setText("拍照完成，可开始检测")
+        # === END ===
 
         # 串口自动测试工作流模式：将图像传递给工作流
         if (self._serial_workflow is not None
@@ -2493,15 +2364,17 @@ class MainWindow(QMainWindow):
             self._show_engineer_image(self._raw_image)
             self._execute_engineer_test()
 
-        # 生产模式：拍照后自动执行检测
-        if self._pending_detect:
-            self._pending_detect = False
-            self._do_detect()
+        # === COMMENTED OUT: 生产模式自动检测 ===
+        # # 生产模式：拍照后自动执行检测
+        # if self._pending_detect:
+        #     self._pending_detect = False
+        #     self._do_detect()
+        # === END ===
 
     def _overlay_roi_on_image(self, cv_img: np.ndarray) -> np.ndarray:
         """在图像上叠加流水线中 MultiROI 工具定义的 ROI 区域框（绿色边框）。
 
-        用于生产模式实时预览时，让操作员看到检测区域的位置。
+        用于实时预览时，让操作员看到检测区域的位置。
         如果未设置流水线或没有 MultiROI 工具，则返回原始图像的副本。
         """
         if cv_img is None:
@@ -2553,25 +2426,33 @@ class MainWindow(QMainWindow):
         return QPixmap.fromImage(q_img)
 
     def _show_cv_image(self, cv_img):
-        """通用图像显示（同时更新 Worker 和 Engineer 显示区）"""
+        """通用图像显示（仅更新 Engineer 显示区，Worker 显示区已移除）"""
         if cv_img is None:
             return
         try:
             pix = self._cv_to_pixmap(cv_img)
-            self.worker_display.update_pixmap(pix)
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # self.worker_display.update_pixmap(pix)
+            # === END ===
             self.eng_test_display.update_pixmap(pix)
         except Exception as e:
-            self.worker_display.label.setText(f"图像显示错误: {e}")
+            # === COMMENTED OUT: 生产模式UI引用 ===
+            # self.worker_display.label.setText(f"图像显示错误: {e}")
+            # === END ===
+            self.eng_test_display.label.setText(f"图像显示错误: {e}")
 
     def _show_worker_image(self, cv_img):
-        """Worker 模式：显示原始图像 + 标注叠加（仅更新 worker_display）"""
-        if cv_img is None:
-            return
-        try:
-            pix = self._cv_to_pixmap(cv_img)
-            self.worker_display.update_pixmap(pix)
-        except Exception as e:
-            self.worker_display.label.setText(f"图像显示错误: {e}")
+        """Worker 模式：显示原始图像 + 标注叠加（已禁用，生产模式已移除）"""
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # if cv_img is None:
+        #     return
+        # try:
+        #     pix = self._cv_to_pixmap(cv_img)
+        #     self.worker_display.update_pixmap(pix)
+        # except Exception as e:
+        #     self.worker_display.label.setText(f"图像显示错误: {e}")
+        # === END ===
+        pass
 
     def _show_engineer_image(self, cv_img):
         """Engineer 模式：显示原始图像 + 标注叠加（仅更新 eng_test_display）"""
@@ -2764,111 +2645,102 @@ class MainWindow(QMainWindow):
             self._eng_test_worker = None
 
     def _do_detect(self):
-        # 如果没有图像，先自动拍照
-        if self._raw_image is None:
-            if self._camera_panel is None or not self._camera_panel.is_camera_open():
-                QMessageBox.warning(self, "提示", "请先打开相机")
-                return
-            self.status_label.setText("正在拍照...")
-            self.worker_status_label.setText("正在拍照...")
-            self.worker_btn_detect.setEnabled(False)
-            self.worker_btn_detect.setText("拍照中...")
-            self._camera_panel.capture_once()
-            # 拍照完成后 _on_capture_completed 会再次调用 _do_detect
-            self._pending_detect = True
-            return
-
-        if self.vision_engine.pipeline is None:
-            QMessageBox.warning(self, "提示", "请先选择并应用一个方案")
-            return
-
-        # 如果已有检测线程在运行，不重复启动
-        if self._detect_worker is not None and self._detect_worker.isRunning():
-            return
-
-        self.worker_btn_detect.setEnabled(False)
-        self.worker_btn_detect.setText("检测中...")
-        self.status_label.setText("检测中...")
-        self.worker_status_label.setText("检测中...")
-
-        self.worker_log.clear_log()
-        self.worker_time_label.setText("")
-        self.worker_log.append_info(f"══════ 检测开始 ══════", "#4fc3f7")
-
-        # 在后台线程执行检测，避免阻塞UI
-        scheme_name = self._current_scheme_name or "未命名"
-        self._detect_worker = DetectWorker(
-            self.vision_engine, self._raw_image.copy(), scheme_name
-        )
-        self._detect_worker.finished.connect(self._on_detect_finished)
-        self._detect_worker.start()
+        # === COMMENTED OUT: 生产模式检测功能（UI元素已移除） ===
+        # # 如果没有图像，先自动拍照
+        # if self._raw_image is None:
+        #     if self._camera_panel is None or not self._camera_panel.is_camera_open():
+        #         QMessageBox.warning(self, "提示", "请先打开相机")
+        #         return
+        #     self.status_label.setText("正在拍照...")
+        #     self.worker_status_label.setText("正在拍照...")
+        #     self.worker_btn_detect.setEnabled(False)
+        #     self.worker_btn_detect.setText("拍照中...")
+        #     self._camera_panel.capture_once()
+        #     # 拍照完成后 _on_capture_completed 会再次调用 _do_detect
+        #     self._pending_detect = True
+        #     return
+        #
+        # if self.vision_engine.pipeline is None:
+        #     QMessageBox.warning(self, "提示", "请先选择并应用一个方案")
+        #     return
+        #
+        # # 如果已有检测线程在运行，不重复启动
+        # if self._detect_worker is not None and self._detect_worker.isRunning():
+        #     return
+        #
+        # self.worker_btn_detect.setEnabled(False)
+        # self.worker_btn_detect.setText("检测中...")
+        # self.status_label.setText("检测中...")
+        # self.worker_status_label.setText("检测中...")
+        #
+        # self.worker_log.clear_log()
+        # self.worker_time_label.setText("")
+        # self.worker_log.append_info(f"══════ 检测开始 ══════", "#4fc3f7")
+        #
+        # # 在后台线程执行检测，避免阻塞UI
+        # scheme_name = self._current_scheme_name or "未命名"
+        # self._detect_worker = DetectWorker(
+        #     self.vision_engine, self._raw_image.copy(), scheme_name
+        # )
+        # self._detect_worker.finished.connect(self._on_detect_finished)
+        # self._detect_worker.start()
+        # === END ===
+        log_info("_do_detect 已禁用（生产模式已移除）")
 
     def _on_detect_finished(self, passed, message, annotated, results):
-        """检测完成回调（主线程执行，安全更新UI）"""
-        try:
-            if passed:
-                self.worker_judge.setText("✓ OK")
-                self.worker_judge.setStyleSheet("""
-                    font-size: 34px; font-weight: bold; padding: 6px 28px;
-                    background-color: #E8F5E9; color: #2E7D32;
-                    border: 2px solid #4CAF50; border-radius: 6px;
-                    min-width: 160px;
-                """)
-                self.worker_status_label.setText("检测通过 (OK)")
-            else:
-                self.worker_judge.setText("✗ NG")
-                self.worker_judge.setStyleSheet("""
-                    font-size: 34px; font-weight: bold; padding: 6px 28px;
-                    background-color: #FFEBEE; color: #C62828;
-                    border: 2px solid #EF5350; border-radius: 6px;
-                    min-width: 160px;
-                """)
-                self.worker_status_label.setText("检测不通过 (NG)")
-
-            if annotated is not None:
-                self._last_annotated = annotated
-                self._show_worker_image(annotated)
-
-            for i, r in enumerate(results):
-                ts = datetime.now().strftime("%H:%M:%S")
-                status = "✓" if r.passed else "✗"
-                self.worker_log.append_log(ts, i + 1, r.tool_type, status,
-                                           r.message, r.elapsed_ms)
-
-            self.worker_log.append_separator()
-            total_ms = sum(r.elapsed_ms for r in results)
-            self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
-            if passed:
-                self.worker_log.append_info(
-                    f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
-            else:
-                self.worker_log.append_info(
-                    f"✗ 检测不通过 (NG) | 总耗时: {total_ms:.1f}ms", "#ff5252")
-
-            status = "OK" if passed else "NG"
-            self.status_label.setText(f"检测完成: {status}")
-            log_info(f"检测完成: {status} | 方案={self._current_scheme_name or '未命名'}")
-
-        except Exception as e:
-            log_error(f"检测结果处理异常: {e}")
-            self.worker_judge.setText("✗ 异常")
-            self.worker_judge.setStyleSheet("""
-                font-size: 34px; font-weight: bold; padding: 6px 28px;
-                background-color: #FFEBEE; color: #C62828;
-                border: 2px solid #EF5350; border-radius: 6px;
-                min-width: 160px;
-            """)
-            self.worker_log.append_info(f"✗ 执行异常: {str(e)}", "#ff5252")
-            self.status_label.setText("检测异常")
-            self.worker_status_label.setText("检测异常")
-        finally:
-            self.worker_btn_detect.setEnabled(True)
-            self.worker_btn_detect.setText("📷 开始检测")
-            # 清除原始图像，确保下次点击"开始检测"时重新拍照
-            self._raw_image = None
-            self._raw_width = 0
-            self._raw_height = 0
-            self._detect_worker = None
+        """检测完成回调（主线程执行，安全更新UI）- 已禁用（生产模式已移除）"""
+        # === COMMENTED OUT: 生产模式检测回调（UI元素已移除） ===
+        # try:
+        #     if passed:
+        #         self.worker_judge.setText("✓ OK")
+        #         self.worker_judge.setStyleSheet("""...""")
+        #         self.worker_status_label.setText("检测通过 (OK)")
+        #     else:
+        #         self.worker_judge.setText("✗ NG")
+        #         self.worker_judge.setStyleSheet("""...""")
+        #         self.worker_status_label.setText("检测不通过 (NG)")
+        #
+        #     if annotated is not None:
+        #         self._last_annotated = annotated
+        #         self._show_worker_image(annotated)
+        #
+        #     for i, r in enumerate(results):
+        #         ts = datetime.now().strftime("%H:%M:%S")
+        #         status = "✓" if r.passed else "✗"
+        #         self.worker_log.append_log(ts, i + 1, r.tool_type, status,
+        #                                    r.message, r.elapsed_ms)
+        #
+        #     self.worker_log.append_separator()
+        #     total_ms = sum(r.elapsed_ms for r in results)
+        #     self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
+        #     if passed:
+        #         self.worker_log.append_info(
+        #             f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
+        #     else:
+        #         self.worker_log.append_info(
+        #             f"✗ 检测不通过 (NG) | 总耗时: {total_ms:.1f}ms", "#ff5252")
+        #
+        #     status = "OK" if passed else "NG"
+        #     self.status_label.setText(f"检测完成: {status}")
+        #     log_info(f"检测完成: {status} | 方案={self._current_scheme_name or '未命名'}")
+        #
+        # except Exception as e:
+        #     log_error(f"检测结果处理异常: {e}")
+        #     self.worker_judge.setText("✗ 异常")
+        #     self.worker_judge.setStyleSheet("""...""")
+        #     self.worker_log.append_info(f"✗ 执行异常: {str(e)}", "#ff5252")
+        #     self.status_label.setText("检测异常")
+        #     self.worker_status_label.setText("检测异常")
+        # finally:
+        #     self.worker_btn_detect.setEnabled(True)
+        #     self.worker_btn_detect.setText("📷 开始检测")
+        #     # 清除原始图像，确保下次点击"开始检测"时重新拍照
+        #     self._raw_image = None
+        #     self._raw_width = 0
+        #     self._raw_height = 0
+        #     self._detect_worker = None
+        # === END ===
+        log_info("_on_detect_finished 已禁用（生产模式已移除）")
 
     def _show_log_settings(self):
         """打开日志限额设置对话框"""
@@ -3075,15 +2947,18 @@ class MainWindow(QMainWindow):
 
     def _update_auto_test_btn_state(self):
         """根据串口和方案状态更新自动测试按钮。"""
-        comm_ok = (self._serial_comm is not None and self._serial_comm.is_open)
-        pipeline_ok = (self.vision_engine.pipeline is not None)
-        workflow_running = (self._serial_workflow is not None
-                            and self._serial_workflow.is_running)
-
-        if workflow_running:
-            self.worker_btn_auto_test.setEnabled(True)
-        else:
-            self.worker_btn_auto_test.setEnabled(comm_ok and pipeline_ok)
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # comm_ok = (self._serial_comm is not None and self._serial_comm.is_open)
+        # pipeline_ok = (self.vision_engine.pipeline is not None)
+        # workflow_running = (self._serial_workflow is not None
+        #                     and self._serial_workflow.is_running)
+        #
+        # if workflow_running:
+        #     self.worker_btn_auto_test.setEnabled(True)
+        # else:
+        #     self.worker_btn_auto_test.setEnabled(comm_ok and pipeline_ok)
+        # === END ===
+        pass
 
     def _toggle_auto_test(self, checked: bool):
         """切换自动测试状态。"""
@@ -3094,75 +2969,84 @@ class MainWindow(QMainWindow):
 
     def _start_auto_test(self):
         """启动串口自动测试工作流。"""
-        # 检查串口
-        if self._serial_comm is None or not self._serial_comm.is_open:
-            QMessageBox.warning(self, "提示",
-                                "请先通过「通信 > 串口通信」打开串口连接")
-            self.worker_btn_auto_test.setChecked(False)
-            return
-
-        # 检查方案
-        if self.vision_engine.pipeline is None:
-            QMessageBox.warning(self, "提示", "请先导入检测方案")
-            self.worker_btn_auto_test.setChecked(False)
-            return
-
-        # 创建并启动工作流
-        self._serial_workflow = SerialTestWorkflow(
-            comm_mgr=self._serial_comm,
-            config=WorkflowConfig(),
-            parent=self,
-        )
-
-        # 连接信号
-        self._serial_workflow.state_changed.connect(
-            self._on_workflow_state_changed)
-        self._serial_workflow.capture_requested.connect(
-            self._on_workflow_capture_requested)
-        self._serial_workflow.test_requested.connect(
-            self._on_workflow_test_requested)
-        self._serial_workflow.error_occurred.connect(
-            self._on_workflow_error)
-
-        # 启动
-        self._serial_workflow.start()
-
-        # 更新 UI
-        self.worker_btn_auto_test.setText("⏹ 停止自动测试")
-        self.worker_btn_detect.setEnabled(False)
-        self.status_label.setText("自动测试已启动 - 等待触发信号...")
-        self.worker_status_label.setText("自动测试已启动 - 等待触发信号...")
-        log_info("串口自动测试工作流已启动")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # # 检查串口
+        # if self._serial_comm is None or not self._serial_comm.is_open:
+        #     QMessageBox.warning(self, "提示",
+        #                         "请先通过「通信 > 串口通信」打开串口连接")
+        #     self.worker_btn_auto_test.setChecked(False)
+        #     return
+        #
+        # # 检查方案
+        # if self.vision_engine.pipeline is None:
+        #     QMessageBox.warning(self, "提示", "请先导入检测方案")
+        #     self.worker_btn_auto_test.setChecked(False)
+        #     return
+        #
+        # # 创建并启动工作流
+        # self._serial_workflow = SerialTestWorkflow(
+        #     comm_mgr=self._serial_comm,
+        #     config=WorkflowConfig(),
+        #     parent=self,
+        # )
+        #
+        # # 连接信号
+        # self._serial_workflow.state_changed.connect(
+        #     self._on_workflow_state_changed)
+        # self._serial_workflow.capture_requested.connect(
+        #     self._on_workflow_capture_requested)
+        # self._serial_workflow.test_requested.connect(
+        #     self._on_workflow_test_requested)
+        # self._serial_workflow.error_occurred.connect(
+        #     self._on_workflow_error)
+        #
+        # # 启动
+        # self._serial_workflow.start()
+        #
+        # # 更新 UI
+        # self.worker_btn_auto_test.setText("⏹ 停止自动测试")
+        # self.worker_btn_detect.setEnabled(False)
+        # self.status_label.setText("自动测试已启动 - 等待触发信号...")
+        # self.worker_status_label.setText("自动测试已启动 - 等待触发信号...")
+        # log_info("串口自动测试工作流已启动")
+        # === END ===
+        log_info("_start_auto_test 已禁用（生产模式已移除）")
 
     def _stop_auto_test(self):
         """停止串口自动测试工作流。"""
-        if self._serial_workflow:
-            self._serial_workflow.stop()
-            self._serial_workflow.cleanup()
-            self._serial_workflow = None
-
-        self.worker_btn_auto_test.setText("🔌 启动自动测试")
-        self.worker_btn_auto_test.setChecked(False)
-        self.worker_btn_detect.setEnabled(
-            self._raw_image is not None
-            and self.vision_engine.pipeline is not None
-        )
-        self.status_label.setText("自动测试已停止")
-        self.worker_status_label.setText("自动测试已停止")
-        log_info("串口自动测试工作流已停止")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # if self._serial_workflow:
+        #     self._serial_workflow.stop()
+        #     self._serial_workflow.cleanup()
+        #     self._serial_workflow = None
+        #
+        # self.worker_btn_auto_test.setText("🔌 启动自动测试")
+        # self.worker_btn_auto_test.setChecked(False)
+        # self.worker_btn_detect.setEnabled(
+        #     self._raw_image is not None
+        #     and self.vision_engine.pipeline is not None
+        # )
+        # self.status_label.setText("自动测试已停止")
+        # self.worker_status_label.setText("自动测试已停止")
+        # log_info("串口自动测试工作流已停止")
+        # === END ===
+        log_info("_stop_auto_test 已禁用（生产模式已移除）")
 
     def _on_workflow_state_changed(self, state):
         """工作流状态变化时更新 UI。"""
-        state_names = {
-            SerialTestWorkflow.State.IDLE: "空闲",
-            SerialTestWorkflow.State.WAITING_TRIGGER: "等待触发信号...",
-            SerialTestWorkflow.State.CAPTURING: "拍照中...",
-            SerialTestWorkflow.State.TESTING: "检测中...",
-            SerialTestWorkflow.State.SENDING_RESULT: "发送结果...",
-        }
-        name = state_names.get(state, str(state))
-        self.worker_status_label.setText(f"自动测试: {name}")
-        self.status_label.setText(f"自动测试: {name}")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # state_names = {
+        #     SerialTestWorkflow.State.IDLE: "空闲",
+        #     SerialTestWorkflow.State.WAITING_TRIGGER: "等待触发信号...",
+        #     SerialTestWorkflow.State.CAPTURING: "拍照中...",
+        #     SerialTestWorkflow.State.TESTING: "检测中...",
+        #     SerialTestWorkflow.State.SENDING_RESULT: "发送结果...",
+        # }
+        # name = state_names.get(state, str(state))
+        # self.worker_status_label.setText(f"自动测试: {name}")
+        # self.status_label.setText(f"自动测试: {name}")
+        # === END ===
+        pass
 
     def _on_workflow_capture_requested(self):
         """工作流请求拍照。"""
@@ -3189,66 +3073,49 @@ class MainWindow(QMainWindow):
         self._workflow_test_worker.start()
 
     def _on_workflow_test_finished(self, passed, message, annotated, results):
-        """工作流测试完成回调（主线程执行，安全更新UI）"""
-        try:
-            # 更新显示
-            if annotated is not None:
-                self._last_annotated = annotated
-                self._show_worker_image(annotated)
-
-            # 更新 OK/NG 判断
-            if passed:
-                self.worker_judge.setText("✓ OK")
-                self.worker_judge.setStyleSheet("""
-                    font-size: 34px; font-weight: bold; padding: 6px 28px;
-                    background-color: #E8F5E9; color: #2E7D32;
-                    border: 2px solid #4CAF50; border-radius: 6px;
-                    min-width: 160px;
-                """)
-            else:
-                self.worker_judge.setText("✗ NG")
-                self.worker_judge.setStyleSheet("""
-                    font-size: 34px; font-weight: bold; padding: 6px 28px;
-                    background-color: #FFEBEE; color: #C62828;
-                    border: 2px solid #EF5350; border-radius: 6px;
-                    min-width: 160px;
-                """)
-
-            # 记录日志
-            self.worker_log.clear_log()
-            self.worker_time_label.setText("")
-            self.worker_log.append_info(
-                f"══════ 自动测试触发 #{self._serial_workflow.trigger_count} ══════",
-                "#4fc3f7")
-            for i, r in enumerate(results):
-                ts = datetime.now().strftime("%H:%M:%S")
-                status = "✓" if r.passed else "✗"
-                self.worker_log.append_log(
-                    ts, i + 1, r.tool_type, status,
-                    r.message, r.elapsed_ms)
-            self.worker_log.append_separator()
-            total_ms = sum(r.elapsed_ms for r in results)
-            # 更新总测试时间显示
-            self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
-            if passed:
-                self.worker_log.append_info(
-                    f"✓ 检测通过 (OK) | 总耗时: {total_ms:.1f}ms", "#8bc34a")
-            else:
-                self.worker_log.append_info(
-                    f"✗ 检测不通过 (NG) | 总耗时: {total_ms:.1f}ms", "#ff5252")
-
-            # 回调工作流
-            self._serial_workflow.on_test_completed(passed, message)
-
-        except Exception as e:
-            log_error(f"自动测试结果处理异常: {e}")
-            self._serial_workflow.on_test_completed(False, str(e))
-        finally:
-            self._workflow_test_worker = None
+        """工作流测试完成回调（主线程执行，安全更新UI）- 已禁用（生产模式已移除）"""
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # try:
+        #     # 更新显示
+        #     if annotated is not None:
+        #         self._last_annotated = annotated
+        #         self._show_worker_image(annotated)
+        #
+        #     # 更新 OK/NG 判断
+        #     if passed:
+        #         self.worker_judge.setText("✓ OK")
+        #         self.worker_judge.setStyleSheet("""...""")
+        #     else:
+        #         self.worker_judge.setText("✗ NG")
+        #         self.worker_judge.setStyleSheet("""...""")
+        #
+        #     # 记录日志
+        #     self.worker_log.clear_log()
+        #     self.worker_time_label.setText("")
+        #     self.worker_log.append_info(...)
+        #     for i, r in enumerate(results):
+        #         ...
+        #     self.worker_log.append_separator()
+        #     total_ms = sum(r.elapsed_ms for r in results)
+        #     self.worker_time_label.setText(f"⏱ {total_ms:.0f}ms")
+        #     ...
+        #
+        #     # 回调工作流
+        #     self._serial_workflow.on_test_completed(passed, message)
+        #
+        # except Exception as e:
+        #     log_error(f"自动测试结果处理异常: {e}")
+        #     self._serial_workflow.on_test_completed(False, str(e))
+        # finally:
+        #     self._workflow_test_worker = None
+        # === END ===
+        log_info("_on_workflow_test_finished 已禁用（生产模式已移除）")
 
     def _on_workflow_error(self, error_msg: str):
         """工作流错误处理。"""
-        self.worker_status_label.setText(f"自动测试错误: {error_msg}")
+        # === COMMENTED OUT: 生产模式UI引用 ===
+        # self.worker_status_label.setText(f"自动测试错误: {error_msg}")
+        # === END ===
         self.status_label.setText(f"自动测试错误: {error_msg}")
         log_error(f"自动测试错误: {error_msg}")
 

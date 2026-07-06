@@ -117,6 +117,9 @@ class InspectionWorkflow(QObject):
     ng_count_changed = pyqtSignal(int)
     """NG次数变化信号"""
 
+    total_elapsed_changed = pyqtSignal(float)
+    """一次检测总耗时变化信号 (秒)"""
+
     # ── NG 手工确认信号 ──
 
     ng_confirm_requested = pyqtSignal(object)
@@ -181,6 +184,9 @@ class InspectionWorkflow(QObject):
         self._trigger_count = 0
         self._ok_count = 0
         self._ng_count = 0
+
+        # 一次检测的总耗时计时
+        self._inspection_start_time: float = 0.0
 
     # ── 属性 ──
 
@@ -487,6 +493,10 @@ class InspectionWorkflow(QObject):
         self._current_pos_index = 0
         self._results = []
 
+        # 记录本次检测开始时间（用于计算总耗时）
+        import time
+        self._inspection_start_time = time.time()
+
         # 延时 1 秒再开始移动，等待工件放稳
         log_info("DI 触发，等待 1 秒后开始检测...")
         self._set_state(self.State.WAITING)
@@ -788,6 +798,11 @@ class InspectionWorkflow(QObject):
         """显示最终结果"""
         self._set_state(self.State.SHOW_RESULT)
 
+        # 计算本次检测总耗时
+        import time
+        total_elapsed = time.time() - self._inspection_start_time
+        self.total_elapsed_changed.emit(total_elapsed)
+
         # 计算最终结果（所有位置都通过才算 OK）
         all_passed = all(r.passed for r in self._results)
 
@@ -798,12 +813,13 @@ class InspectionWorkflow(QObject):
             # 发射最终结果信号
             self.all_results_ready.emit(True, self._results)
             log_info(f"最终结果: OK "
-                     f"(触发: {self._trigger_count}, OK: {self._ok_count}, NG: {self._ng_count})")
+                     f"(触发: {self._trigger_count}, OK: {self._ok_count}, NG: {self._ng_count})"
+                     f" | 总耗时: {total_elapsed:.2f}s")
             # 自动继续监听
             self._set_state(self.State.MONITORING)
         else:
             # NG：发射手工确认请求信号，等待 UI 层弹窗确认
-            log_info("检测结果为 NG，请求手工确认...")
+            log_info(f"检测结果为 NG，请求手工确认... | 总耗时: {total_elapsed:.2f}s")
             self._set_state(self.State.WAITING_FOR_CONFIRM)  # 进入等待确认状态
             self.ng_confirm_requested.emit(self._results)
 

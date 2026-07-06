@@ -245,6 +245,7 @@ class InspectionPanel(QWidget):
         super().__init__(parent)
         self._workflow = workflow
         self._position_widgets: List[PositionResultWidget] = []
+        self._ng_dialog = None  # NG 确认对话框引用，用于实体按键关闭
 
         self._setup_ui()
         self._connect_signals()
@@ -381,12 +382,20 @@ class InspectionPanel(QWidget):
         self._ng_count_label = QLabel("NG: 0")
         self._ng_count_label.setStyleSheet("font-size: 16px; color: #EF5350; font-weight: bold; border: none;")
 
+        # 一次检测总耗时显示
+        self._total_elapsed_label = QLabel("耗时: --")
+        self._total_elapsed_label.setStyleSheet("""
+            font-size: 16px; font-weight: bold; color: #CE93D8;
+            border: none;
+        """)
+
         self._product_name_label = QLabel("当前产品: 未选择")
         self._product_name_label.setStyleSheet("font-size: 16px; color: #d4d4d4; font-weight: bold; border: none;")
 
         stats_layout.addWidget(self._trigger_count_label)
         stats_layout.addWidget(self._ok_count_label)
         stats_layout.addWidget(self._ng_count_label)
+        stats_layout.addWidget(self._total_elapsed_label)
         stats_layout.addStretch()
         stats_layout.addWidget(self._product_name_label)
 
@@ -465,6 +474,9 @@ class InspectionPanel(QWidget):
         self._workflow.ok_count_changed.connect(self._on_ok_count_changed)
         self._workflow.ng_count_changed.connect(self._on_ng_count_changed)
         self._workflow.ng_confirm_requested.connect(self._on_ng_confirm_requested)
+        self._workflow.ng_confirm_closed.connect(self._on_ng_confirm_closed)
+        self._workflow.reset_during_confirm.connect(self._on_reset_during_confirm)
+        self._workflow.total_elapsed_changed.connect(self._on_total_elapsed_changed)
 
     def _refresh_product_list(self):
         """刷新产品列表"""
@@ -839,8 +851,25 @@ class InspectionPanel(QWidget):
         btn_ok.clicked.connect(_on_confirm_ok)
         btn_ng.clicked.connect(_on_confirm_ng)
 
+        # 保存对话框引用，以便实体按键（D1/D2）或复位（D3）信号能关闭它
+        self._ng_dialog = dialog
         self._append_log("⚠️ NG 检测结果，等待手工确认...")
         dialog.exec_()
+        self._ng_dialog = None  # 对话框关闭后清除引用
+
+    def _on_ng_confirm_closed(self):
+        """NG 确认完成 - 由工作流在 D1/D2 实体按键确认后发射，关闭弹窗"""
+        if self._ng_dialog is not None:
+            self._ng_dialog.accept()
+            self._ng_dialog = None
+            self._append_log("实体按键确认，关闭 NG 确认弹窗")
+
+    def _on_reset_during_confirm(self):
+        """D3 复位时关闭 NG 确认弹窗"""
+        if self._ng_dialog is not None:
+            self._ng_dialog.reject()  # 使用 reject() 而非 accept()，表示非正常关闭
+            self._ng_dialog = None
+            self._append_log("D3 复位，关闭 NG 确认弹窗")
 
     def _on_error(self, error_msg: str):
         """错误发生"""
@@ -859,6 +888,15 @@ class InspectionPanel(QWidget):
     def _on_ng_count_changed(self, count: int):
         """NG次数更新"""
         self._ng_count_label.setText(f"NG: {count}")
+
+    def _on_total_elapsed_changed(self, elapsed_seconds: float):
+        """一次检测总耗时更新"""
+        if elapsed_seconds < 60:
+            self._total_elapsed_label.setText(f"耗时: {elapsed_seconds:.2f}s")
+        else:
+            minutes = int(elapsed_seconds // 60)
+            seconds = elapsed_seconds % 60
+            self._total_elapsed_label.setText(f"耗时: {minutes}m {seconds:.1f}s")
 
     # ── 日志 ──
 
