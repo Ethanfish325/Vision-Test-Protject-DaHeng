@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import threading
+import contextlib
 from logging.handlers import TimedRotatingFileHandler
 from typing import Optional
 
@@ -15,6 +16,36 @@ _DEFAULT_MAX_LOG_SIZE = 50 * 1024 ** 3
 _DEFAULT_CLEANUP_RATIO = 0.5
 # 需要监控和清理的目录列表（只清理这些目录下的文件，不碰 schemes 等）
 _CLEANUP_DIRS = [LOGS_DIR, ERRORS_DIR]
+
+# ============================================================================
+# 日志上下文：用于控制日志是否写入文件
+# ============================================================================
+# 线程局部变量，用于标记当前线程是否应抑制文件日志输出
+_thread_local = threading.local()
+
+def _is_file_logging_suppressed() -> bool:
+    """检查当前线程是否抑制了文件日志输出"""
+    return getattr(_thread_local, 'suppress_file_log', False)
+
+@contextlib.contextmanager
+def suppress_file_logging():
+    """
+    上下文管理器：在当前线程中临时抑制文件日志输出。
+    
+    用于设计模式等场景，避免将调试/测试过程中的日志写入文件，
+    只保留自动化流程测试中的错误日志。
+    
+    使用方式:
+        with suppress_file_logging():
+            # 此范围内的日志不会写入文件
+            vision_engine.execute(...)
+    """
+    old_value = getattr(_thread_local, 'suppress_file_log', False)
+    _thread_local.suppress_file_log = True
+    try:
+        yield
+    finally:
+        _thread_local.suppress_file_log = old_value
 
 
 def _get_dir_size(path: str) -> int:
@@ -82,6 +113,17 @@ def _cleanup_old_logs(max_size: int, cleanup_ratio: float):
             continue
 
 
+class _SuppressFileFilter(logging.Filter):
+    """
+    日志过滤器：当当前线程设置了 suppress_file_log 标志时，
+    抑制日志写入文件（仅影响文件处理器，不影响控制台输出）。
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # 如果当前线程抑制了文件日志，则过滤掉（不写入文件）
+        return not _is_file_logging_suppressed()
+
+
 class _SizeCheckTimedRotatingFileHandler(TimedRotatingFileHandler):
     """
     继承 TimedRotatingFileHandler，在每次实际写入日志后检查并清理日志空间。
@@ -95,6 +137,8 @@ class _SizeCheckTimedRotatingFileHandler(TimedRotatingFileHandler):
         self._check_interval: float = 300.0  # 两次检查的最小间隔（秒），5分钟检查一次
         self._lock = threading.Lock()
         super().__init__(*args, **kwargs)
+        # 添加抑制过滤器，使文件处理器支持线程级别的日志抑制
+        self.addFilter(_SuppressFileFilter())
 
     def emit(self, record: logging.LogRecord):
         """写入日志记录，写入后检查是否需要清理"""

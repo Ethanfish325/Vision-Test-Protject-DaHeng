@@ -27,7 +27,7 @@ class PropertyPanel(QWidget):
 
         title = QLabel("属性")
         title.setStyleSheet("""
-            font-size: 16px; font-weight: bold; color: #d4d4d4;
+            font-size: 18px; font-weight: bold; color: #d4d4d4;
             padding: 8px 10px; background-color: #1e1e1e;
             border-bottom: 1px solid #444;
         """)
@@ -43,13 +43,13 @@ class PropertyPanel(QWidget):
         info_layout.setSpacing(2)
 
         self.index_label = QLabel("")
-        self.index_label.setStyleSheet("color: #4A90D9; font-size: 15px; font-weight: bold;")
+        self.index_label.setStyleSheet("color: #4A90D9; font-size: 17px; font-weight: bold;")
         self.name_label = QLabel("未选择步骤")
-        self.name_label.setStyleSheet("font-size: 17px; font-weight: bold; color: #d4d4d4;")
+        self.name_label.setStyleSheet("font-size: 19px; font-weight: bold; color: #d4d4d4;")
         self.category_label = QLabel("")
-        self.category_label.setStyleSheet("color: #999; font-size: 15px;")
+        self.category_label.setStyleSheet("color: #999; font-size: 17px;")
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("font-size: 15px;")
+        self.status_label.setStyleSheet("font-size: 17px;")
 
         info_layout.addWidget(self.index_label)
         info_layout.addWidget(self.name_label)
@@ -57,7 +57,7 @@ class PropertyPanel(QWidget):
         info_layout.addWidget(self.status_label)
 
         self.enable_check = QCheckBox("启用此步骤")
-        self.enable_check.setStyleSheet("color: #d4d4d4; font-size: 15px;")
+        self.enable_check.setStyleSheet("color: #d4d4d4; font-size: 17px;")
         self.enable_check.toggled.connect(self._on_enable_toggled)
         info_layout.addWidget(self.enable_check)
 
@@ -82,7 +82,7 @@ class PropertyPanel(QWidget):
         self.param_table.setStyleSheet("""
             QTableWidget {
                 background-color: #252525; color: #b0b0b0;
-                border: none; font-size: 12px;
+                border: none; font-size: 14px;
                 alternate-background-color: #2a2a2a;
             }
             QTableWidget::item {
@@ -91,7 +91,7 @@ class PropertyPanel(QWidget):
             QHeaderView::section {
                 background-color: #3c3c3c; color: #999;
                 border: none; border-bottom: 1px solid #444;
-                padding: 5px 8px; font-weight: bold; font-size: 14px;
+                padding: 5px 8px; font-weight: bold; font-size: 16px;
             }
         """)
         self.param_table.setMinimumHeight(60)
@@ -157,10 +157,10 @@ class PropertyPanel(QWidget):
         enabled = slot.is_enabled()
         if enabled:
             self.status_label.setText("● 已启用")
-            self.status_label.setStyleSheet("font-size: 15px; color: #66BB6A;")
+            self.status_label.setStyleSheet("font-size: 17px; color: #66BB6A;")
         else:
             self.status_label.setText("● 已禁用")
-            self.status_label.setStyleSheet("font-size: 15px; color: #EF5350;")
+            self.status_label.setStyleSheet("font-size: 17px; color: #EF5350;")
 
         self.enable_check.blockSignals(True)
         self.enable_check.setChecked(enabled)
@@ -217,10 +217,10 @@ class PropertyPanel(QWidget):
             self._current_slot.set_enabled(checked)
             if checked:
                 self.status_label.setText("● 已启用")
-                self.status_label.setStyleSheet("font-size: 13px; color: #66BB6A;")
+                self.status_label.setStyleSheet("font-size: 15px; color: #66BB6A;")
             else:
                 self.status_label.setText("● 已禁用")
-                self.status_label.setStyleSheet("font-size: 13px; color: #EF5350;")
+                self.status_label.setStyleSheet("font-size: 15px; color: #EF5350;")
             parent = self.parent()
             while parent:
                 if hasattr(parent, 'pipeline_changed'):
@@ -302,7 +302,7 @@ class PipelineEditor(QWidget):
         self.btn_clear = QPushButton("🗑 清空")
         self.btn_clear.setStyleSheet("""
             QPushButton { background-color: #3c3c3c; color: #EF5350; padding: 2px 12px;
-                         border: 1px solid #555; border-radius: 3px; font-size: 15px; }
+                         border: 1px solid #555; border-radius: 3px; font-size: 17px; }
             QPushButton:hover { background-color: #4a2a2a; }
         """)
 
@@ -310,10 +310,10 @@ class PipelineEditor(QWidget):
         layout.addStretch()
 
         self.status_label = QLabel("就绪")
-        self.status_label.setStyleSheet("color: #999; font-size: 15px;")
+        self.status_label.setStyleSheet("color: #999; font-size: 17px;")
 
         self.node_count_label = QLabel("算子: 0")
-        self.node_count_label.setStyleSheet("color: #999; font-size: 15px;")
+        self.node_count_label.setStyleSheet("color: #999; font-size: 17px;")
 
         layout.addWidget(self.node_count_label)
         layout.addWidget(self.status_label)

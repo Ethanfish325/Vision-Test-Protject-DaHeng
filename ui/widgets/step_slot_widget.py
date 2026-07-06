@@ -53,7 +53,7 @@ class StepSlot(QFrame):
                 color: #999;
                 border-radius: 14px;
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 15px;
             }
         """)
         self._layout.addWidget(self._index_label)
@@ -62,12 +62,12 @@ class StepSlot(QFrame):
         self._icon_label = QLabel()
         self._icon_label.setFixedSize(32, 32)
         self._icon_label.setAlignment(Qt.AlignCenter)
-        self._icon_label.setStyleSheet("font-size: 20px;")
+        self._icon_label.setStyleSheet("font-size: 22px;")
         self._layout.addWidget(self._icon_label)
 
         # 名称标签
         self._name_label = QLabel("拖入算子")
-        self._name_label.setStyleSheet("color: #888; font-size: 13px;")
+        self._name_label.setStyleSheet("color: #888; font-size: 15px;")
         self._layout.addWidget(self._name_label, 1)
 
         # 启用按钮
@@ -89,7 +89,7 @@ class StepSlot(QFrame):
                 background: #4a2020;
                 border: 1px solid #ff5252;
                 color: #ff5252;
-                font-size: 16px;
+                font-size: 18px;
                 font-weight: bold;
                 border-radius: 16px;
             }
@@ -164,13 +164,13 @@ class StepSlot(QFrame):
         self._name_label.setText(display)
         self._name_label.setStyleSheet(f"""
             font-weight: 600;
-            font-size: 14px;
+            font-size: 16px;
             color: {color.name()};
         """)
 
         # 更新图标标签
         self._icon_label.setText(CATEGORY_ICONS.get(category, ""))
-        self._icon_label.setStyleSheet(f"font-size: 22px; color: {color.name()};")
+        self._icon_label.setStyleSheet(f"font-size: 24px; color: {color.name()};")
 
         # 更新序号标签颜色
         self._index_label.setStyleSheet(f"""
@@ -179,7 +179,7 @@ class StepSlot(QFrame):
                 color: white;
                 border-radius: 14px;
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 15px;
             }}
         """)
 
@@ -196,7 +196,7 @@ class StepSlot(QFrame):
         self._enabled = True
         self._is_occupied = False
         self._name_label.setText("拖入算子")
-        self._name_label.setStyleSheet("color: #888; font-size: 13px;")
+        self._name_label.setStyleSheet("color: #888; font-size: 15px;")
         self._icon_label.setText("")
         self._icon_label.setStyleSheet("")
         self._index_label.setStyleSheet("""
@@ -205,7 +205,7 @@ class StepSlot(QFrame):
                 color: #999;
                 border-radius: 14px;
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 15px;
             }
         """)
         self._enable_btn.setVisible(False)
@@ -226,7 +226,7 @@ class StepSlot(QFrame):
                     color: white;
                     border: 1px solid #66BB6A;
                     border-radius: 16px;
-                    font-size: 16px;
+                    font-size: 18px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
@@ -244,7 +244,7 @@ class StepSlot(QFrame):
                     color: #ccc;
                     border: 1px solid #777;
                     border-radius: 16px;
-                    font-size: 16px;
+                    font-size: 18px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
@@ -404,12 +404,12 @@ class StepSlotWidget(QWidget):
         header_layout.setSpacing(6)
         
         header_icon = QLabel("📋")
-        header_icon.setStyleSheet("font-size: 16px;")
+        header_icon.setStyleSheet("font-size: 18px;")
         header_layout.addWidget(header_icon)
         
         header = QLabel("步骤列表")
         header.setStyleSheet("""
-            font-size: 15px;
+            font-size: 17px;
             font-weight: bold;
             color: #d4d4d4;
             padding: 0;
@@ -427,7 +427,7 @@ class StepSlotWidget(QWidget):
                 color: #4A90D9;
                 border: 1px solid #2a5a8c;
                 border-radius: 4px;
-                font-size: 13px;
+                font-size: 15px;
                 font-weight: bold;
                 padding: 2px 12px;
             }

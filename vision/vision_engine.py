@@ -92,8 +92,6 @@ class VisionEngine:
             else:
                 message = "检测失败 (NG)"
                 log_info(f"检测NG | 方案={scheme_name} | 产品={product_id}")
-                self._save_error_data(scheme_name, product_id, cv_image,
-                                      annotated, results)
 
             return passed, message, annotated
 
@@ -192,8 +190,13 @@ class VisionEngine:
                             (x + w - label_w - 5, y - 8),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
-    def _save_error_data(self, scheme_name, product_id, raw_image,
-                         annotated_image, results):
+    def save_error_data(self, scheme_name, product_id, raw_image,
+                        annotated_image, results):
+        """
+        保存检测失败的原始图、结果图和 JSON 数据到 ERRORS_DIR。
+        由调用方在确认 NG 后调用（自动化流程在人工确认 NG 后调用，
+        设计模式不调用）。
+        """
         try:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             date_str = time.strftime("%Y-%m-%d")

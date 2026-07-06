@@ -145,7 +145,7 @@ class AxisPositionPanel(QGroupBox):
         headers = ["轴", "命令位置", "编码器位置", "速度", "状态"]
         for col, h in enumerate(headers):
             label = QLabel(h)
-            label.setStyleSheet("color: #4fc3f7; font-weight: bold; font-size: 13px;")
+            label.setStyleSheet("color: #4fc3f7; font-weight: bold; font-size: 15px;")
             layout.addWidget(label, 0, col)
 
         for i in range(4):
@@ -218,7 +218,7 @@ class IOMonitorPanel(QWidget):
             led = LedIndicator(color="#4CAF50")
             self._input_leds.append(led)
             label = QLabel(f"DI{i}")
-            label.setStyleSheet("color: #d4d4d4; font-size: 12px;")
+            label.setStyleSheet("color: #d4d4d4; font-size: 14px;")
             self._input_labels.append(label)
             row = i // 8
             col = (i % 8) * 2
@@ -237,7 +237,7 @@ class IOMonitorPanel(QWidget):
             led = LedIndicator(color="#FF9800")
             self._output_leds.append(led)
             label = QLabel(f"DO{i}")
-            label.setStyleSheet("color: #d4d4d4; font-size: 12px;")
+            label.setStyleSheet("color: #d4d4d4; font-size: 14px;")
             self._output_labels.append(label)
             row = i // 8
             col = (i % 8) * 2
@@ -267,7 +267,7 @@ class IOMonitorPanel(QWidget):
     def _group_style(self):
         return """
             QGroupBox {
-                font-weight: bold; font-size: 13px; border: 1px solid #444;
+                font-weight: bold; font-size: 15px; border: 1px solid #444;
                 border-radius: 4px; margin-top: 8px; padding-top: 14px;
                 color: #d4d4d4;
             }
@@ -352,7 +352,7 @@ class NMCControlDialog(QDialog):
                 background-color: #0d0d0d; color: #c8c8c8;
                 border: 1px solid #444; border-radius: 3px;
                 font-family: Consolas, "Courier New", monospace;
-                font-size: 12px; padding: 4px;
+                font-size: 14px; padding: 4px;
             }
         """)
         main_layout.addWidget(self.log_edit)
@@ -395,11 +395,11 @@ class NMCControlDialog(QDialog):
         status_layout.setContentsMargins(4, 2, 4, 2)
 
         self.status_label = QLabel("未连接")
-        self.status_label.setStyleSheet("color: #ff5252; font-size: 13px; font-weight: bold;")
+        self.status_label.setStyleSheet("color: #ff5252; font-size: 15px; font-weight: bold;")
         status_layout.addWidget(self.status_label, 1)
 
         self.sys_info_label = QLabel("")
-        self.sys_info_label.setStyleSheet("color: #999; font-size: 12px;")
+        self.sys_info_label.setStyleSheet("color: #999; font-size: 14px;")
         status_layout.addWidget(self.sys_info_label)
 
         main_layout.addWidget(status_bar)
@@ -419,7 +419,7 @@ class NMCControlDialog(QDialog):
             QToolButton {
                 background-color: #3c3c3c; color: #d4d4d4;
                 padding: 6px 14px; border: 1px solid #555;
-                border-radius: 4px; font-size: 13px;
+                border-radius: 4px; font-size: 15px;
             }
             QToolButton:hover {
                 background-color: #4a4a4a; border-color: #4A90D9;
@@ -451,7 +451,7 @@ class NMCControlDialog(QDialog):
             QToolButton {
                 background-color: #C62828; color: #fff;
                 padding: 6px 14px; border: 2px solid #EF5350;
-                border-radius: 4px; font-size: 13px; font-weight: bold;
+                border-radius: 4px; font-size: 15px; font-weight: bold;
             }
             QToolButton:hover { background-color: #B71C1C; }
             QToolButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
@@ -632,12 +632,12 @@ class NMCControlDialog(QDialog):
 
         pos_layout.addWidget(QLabel("当前命令位置:"), 2, 0)
         self.lbl_cur_pos = QLabel("-")
-        self.lbl_cur_pos.setStyleSheet("color: #4fc3f7; font-family: Consolas; font-size: 14px;")
+        self.lbl_cur_pos.setStyleSheet("color: #4fc3f7; font-family: Consolas; font-size: 16px;")
         pos_layout.addWidget(self.lbl_cur_pos, 2, 1, 1, 2)
 
         pos_layout.addWidget(QLabel("当前编码器:"), 3, 0)
         self.lbl_cur_enc = QLabel("-")
-        self.lbl_cur_enc.setStyleSheet("color: #ffa726; font-family: Consolas; font-size: 14px;")
+        self.lbl_cur_enc.setStyleSheet("color: #ffa726; font-family: Consolas; font-size: 16px;")
         pos_layout.addWidget(self.lbl_cur_enc, 3, 1, 1, 2)
 
         layout.addWidget(pos_group)
@@ -684,7 +684,7 @@ class NMCControlDialog(QDialog):
         state_group.setStyleSheet(self._group_box_style())
         state_layout = QHBoxLayout(state_group)
         self.lbl_axis_state = QLabel("状态: -")
-        self.lbl_axis_state.setStyleSheet("color: #c8c8c8; font-family: Consolas; font-size: 14px;")
+        self.lbl_axis_state.setStyleSheet("color: #c8c8c8; font-family: Consolas; font-size: 16px;")
         state_layout.addWidget(self.lbl_axis_state)
         state_layout.addStretch()
         layout.addWidget(state_group)
@@ -775,7 +775,7 @@ class NMCControlDialog(QDialog):
         status_layout = QVBoxLayout(status_group)
 
         self.lbl_home_state = QLabel("就绪")
-        self.lbl_home_state.setStyleSheet("color: #d4d4d4; font-size: 14px; font-weight: bold;")
+        self.lbl_home_state.setStyleSheet("color: #d4d4d4; font-size: 16px; font-weight: bold;")
         status_layout.addWidget(self.lbl_home_state)
 
         self.home_progress = QProgressBar()
@@ -1067,11 +1067,11 @@ class NMCControlDialog(QDialog):
 
         if connected:
             self.status_label.setText("已连接")
-            self.status_label.setStyleSheet("color: #4caf50; font-size: 13px; font-weight: bold;")
+            self.status_label.setStyleSheet("color: #4caf50; font-size: 15px; font-weight: bold;")
             self._refresh_timer.start(100)
         else:
             self.status_label.setText("未连接")
-            self.status_label.setStyleSheet("color: #ff5252; font-size: 13px; font-weight: bold;")
+            self.status_label.setStyleSheet("color: #ff5252; font-size: 15px; font-weight: bold;")
             self._refresh_timer.stop()
 
     # =====================================================================
@@ -1744,7 +1744,7 @@ class NMCControlDialog(QDialog):
         return (
             f"QPushButton {{"
             f"  background-color: {color}; color: white; border: none;"
-            f"  border-radius: 3px; padding: 4px 12px; font-size: 12px;"
+            f"  border-radius: 3px; padding: 4px 12px; font-size: 14px;"
             f"}}"
             f"QPushButton:hover {{ background-color: {self._darken_color(color)}; }}"
             f"QPushButton:pressed {{ background-color: {self._darken_color(color, 0.7)}; }}"
@@ -1755,7 +1755,7 @@ class NMCControlDialog(QDialog):
         return (
             f"QPushButton {{"
             f"  background-color: {color}; color: white; border: none;"
-            f"  border-radius: 4px; padding: 6px 16px; font-size: 13px; font-weight: bold;"
+            f"  border-radius: 4px; padding: 6px 16px; font-size: 15px; font-weight: bold;"
             f"}}"
             f"QPushButton:hover {{ background-color: {self._darken_color(color)}; }}"
             f"QPushButton:pressed {{ background-color: {self._darken_color(color, 0.7)}; }}"

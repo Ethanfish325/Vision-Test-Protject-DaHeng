@@ -42,7 +42,7 @@ from core.log_manager import log_info, log_error, log_warning
 @dataclass
 class WorkflowConfig:
     """工作流配置"""
-    di_bit: int = 3                    # DI 输入位号
+    di_bit: int = 3                    # DI 输入位号（自动化流程触发）
     poll_interval_ms: int = 50         # DI 轮询间隔（毫秒）
     axis: int = 1                      # 运动轴号
     v_max: float = 50000.0             # 最大速度
@@ -50,6 +50,12 @@ class WorkflowConfig:
     origin_position: int = 0           # 原点位置
     move_timeout_ms: int = 10000       # 运动超时（毫秒）
     arrive_check_interval_ms: int = 50 # 到位检测轮询间隔
+    # ---- 多DI监测配置 ----
+    di_bit_ok: int = 0                 # D1 - OK确认输入位号（默认DI0）
+    di_bit_ng: int = 1                 # D2 - NG确认输入位号（默认DI1）
+    di_bit_reset: int = 2              # D3 - 复位回零输入位号（默认DI2）
+    reset_speed: float = 20000.0       # 复位回零速度
+    reset_acc: float = 10000.0         # 复位回零加速度
 
 
 # ============================================================================
@@ -85,6 +91,7 @@ class InspectionWorkflow(QObject):
         TESTING = "检测中"
         RETURNING = "退回原点"
         SHOW_RESULT = "显示结果"
+        WAITING_FOR_CONFIRM = "等待确认"  # NG弹窗等待D1/D2确认
         ERROR = "错误"
 
     # ── 信号 ──
@@ -114,6 +121,12 @@ class InspectionWorkflow(QObject):
 
     ng_confirm_requested = pyqtSignal(object)
     """NG 手工确认请求信号 (List[PositionResult]) - 发射所有检测结果，等待 UI 层弹窗确认"""
+
+    ng_confirm_closed = pyqtSignal()
+    """NG 确认完成信号 - D1/D2 硬件按键或鼠标点击确认后发射，通知 UI 关闭弹窗"""
+
+    reset_during_confirm = pyqtSignal()
+    """D3复位时发射，通知UI关闭NG确认弹窗"""
 
     def __init__(self, nmc_sdk: Optional[NMCSDK] = None,
                  camera_mgr=None, vision_engine=None,
@@ -145,8 +158,9 @@ class InspectionWorkflow(QObject):
 
         # DI 轮询
         self._poll_timer = QTimer(self)
-        self._poll_timer.timeout.connect(self._poll_di)
-        self._last_di_state = 0
+        self._poll_timer.timeout.connect(self._poll_all_di)
+        self._last_di_state = 1  # 默认高电平（未按下）
+        self._last_di_states = {0: 1, 1: 1, 2: 1}  # 记录三个DI(D1/D2/D3)的上次状态，默认高电平
 
         # 到位检测
         self._arrive_timer = QTimer(self)
@@ -248,6 +262,12 @@ class InspectionWorkflow(QObject):
         self._config.move_timeout_ms = motion.get("move_timeout_s", 10) * 1000
         self._config.di_bit = product_config.get("di_bit", self._config.di_bit)
         self._config.poll_interval_ms = product_config.get("poll_interval_ms", self._config.poll_interval_ms)
+        # 多DI监测配置
+        self._config.di_bit_ok = product_config.get("di_bit_ok", self._config.di_bit_ok)
+        self._config.di_bit_ng = product_config.get("di_bit_ng", self._config.di_bit_ng)
+        self._config.di_bit_reset = product_config.get("di_bit_reset", self._config.di_bit_reset)
+        self._config.reset_speed = product_config.get("reset_speed", self._config.reset_speed)
+        self._config.reset_acc = product_config.get("reset_acc", self._config.reset_acc)
 
         log_info(f"产品配置已加载: {product_config.get('name', '未知')} "
                  f"({len(positions)}个位置)")
@@ -330,11 +350,30 @@ class InspectionWorkflow(QObject):
 
     # ── DI 轮询 ──
 
-    def _poll_di(self):
-        """轮询 DI 状态，检测下降沿（工件放入时触发）"""
-        if self._state != self.State.MONITORING:
-            return
+    def _poll_all_di(self):
+        """轮询所有 DI 状态，根据当前工作流状态处理不同 DI 信号"""
+        # 1. 始终检测 D3 复位信号（优先级最高）
+        self._check_d3_reset()
 
+        # 2. 根据当前状态检测其他 DI
+        if self._state == self.State.MONITORING:
+            self._check_di_trigger()
+        elif self._state == self.State.WAITING_FOR_CONFIRM:
+            self._check_di_confirm()
+
+    def _check_d3_reset(self):
+        """检测 D3 复位信号（下降沿：默认1，按下为0）"""
+        try:
+            current = self._nmc_sdk.get_input_bit(self._config.di_bit_reset)
+            if current == 0 and self._last_di_states[2] == 1:
+                log_info("D3 复位按键按下，执行复位回零")
+                self._execute_reset()
+            self._last_di_states[2] = current
+        except Exception as e:
+            log_error(f"读取 D3 复位 DI 失败: {e}")
+
+    def _check_di_trigger(self):
+        """检测原触发 DI 信号（下降沿：默认1，按下为0）"""
         try:
             current = self._nmc_sdk.get_input_bit(self._config.di_bit)
             # 检测下降沿: 1 -> 0（工件放入时 DI 从高变低）
@@ -344,6 +383,100 @@ class InspectionWorkflow(QObject):
             self._last_di_state = current
         except Exception as e:
             log_error(f"读取 DI 失败: {e}")
+
+    def _check_di_confirm(self):
+        """检测 D1/D2 确认信号（下降沿：默认1，按下为0）"""
+        try:
+            # 检测 D1 (OK)
+            d1 = self._nmc_sdk.get_input_bit(self._config.di_bit_ok)
+            if d1 == 0 and self._last_di_states[0] == 1:
+                log_info("D1 OK 按键按下")
+                self.confirm_ng_result(True)
+            self._last_di_states[0] = d1
+
+            # 检测 D2 (NG)
+            d2 = self._nmc_sdk.get_input_bit(self._config.di_bit_ng)
+            if d2 == 0 and self._last_di_states[1] == 1:
+                log_info("D2 NG 按键按下")
+                self.confirm_ng_result(False)
+            self._last_di_states[1] = d2
+        except Exception as e:
+            log_error(f"读取 D1/D2 确认 DI 失败: {e}")
+
+    # ── D3 复位与归零 ──
+
+    def _execute_reset(self):
+        """执行 D3 复位操作 - 停止当前流程，AXI1 回到 0 坐标"""
+        log_info("D3 复位按键触发，执行复位操作...")
+
+        # 1) 停止所有定时器
+        self._poll_timer.stop()
+        self._arrive_timer.stop()
+        self._start_delay_timer.stop()
+
+        # 2) 如果当前在 NG 确认等待状态，通知 UI 关闭弹窗
+        if self._state == self.State.WAITING_FOR_CONFIRM:
+            log_info("D3 复位：正在等待 NG 确认，通知关闭弹窗")
+            self.reset_during_confirm.emit()
+
+        # 3) 设置运行标志
+        self._running = False
+        self._set_state(self.State.IDLE)
+
+        # 4) 先停止轴运动，再延时启动归零（确保轴完全停止）
+        try:
+            self._nmc_sdk.axis_stop(self._config.axis, Axis_Stop_IMD)
+        except Exception as e:
+            log_warning(f"D3 复位停止轴失败(可忽略): {e}")
+
+        # 延时 100ms 后执行归零，等待轴完全停止
+        QTimer.singleShot(100, self._move_to_zero)
+
+    def _move_to_zero(self):
+        """移动到 0 坐标（速度 20000，加速度 10000）"""
+        try:
+            axis = self._config.axis
+
+            # 1) 确保轴已使能
+            try:
+                self._nmc_sdk.set_servo_enable(axis, 1)
+            except Exception as e:
+                log_warning(f"轴{axis + 1} 使能失败(可忽略): {e}")
+
+            # 2) 清除轴状态
+            try:
+                self._nmc_sdk.clear_axis_state(axis)
+            except Exception as e:
+                log_warning(f"清除轴{axis + 1} 状态失败(可忽略): {e}")
+
+            # 3) 读取当前位置，计算到 0 的相对位移
+            try:
+                current_pos = self._nmc_sdk.get_position(axis)
+            except Exception:
+                current_pos = 0
+            diff = 0 - current_pos
+            log_info(f"D3 复位: 轴{axis + 1} 当前位置: {current_pos}, 目标: 0, 相对位移: {diff}")
+
+            # 4) 设置速度参数（速度 20000，加速度 10000）
+            ret_profile = self._nmc_sdk.set_axis_profile(
+                axis,
+                0,                          # v_ini
+                self._config.reset_speed,   # v_max = 20000
+                self._config.reset_acc,     # a_max = 10000
+                0,                          # jerk
+                0,                          # v_end
+                Profile_S                   # S曲线
+            )
+            log_info(f"D3 复位: set_axis_profile 返回值: {ret_profile}")
+
+            # 5) 发送相对位置运动指令
+            ret_move = self._nmc_sdk.uniaxial_long(axis, diff, Position_Opposite)
+            log_info(f"D3 复位: uniaxial_long(相对, dist={diff}) 返回值: {ret_move}")
+
+            if ret_move != 0:
+                log_error(f"D3 复位: 轴{axis + 1} 运动失败，返回值: {ret_move}")
+        except Exception as e:
+            log_error(f"D3 复位运动失败: {e}")
 
     def _on_di_triggered(self):
         """DI 触发 - 延时后开始执行检测流程"""
@@ -671,7 +804,7 @@ class InspectionWorkflow(QObject):
         else:
             # NG：发射手工确认请求信号，等待 UI 层弹窗确认
             log_info("检测结果为 NG，请求手工确认...")
-            self._set_state(self.State.WAITING)  # 进入等待确认状态
+            self._set_state(self.State.WAITING_FOR_CONFIRM)  # 进入等待确认状态
             self.ng_confirm_requested.emit(self._results)
 
     def confirm_ng_result(self, confirmed_ok: bool):
@@ -681,28 +814,48 @@ class InspectionWorkflow(QObject):
         Args:
             confirmed_ok: True 表示操作员确认为 OK，False 表示确认为 NG
         """
-        if self._state != self.State.WAITING:
-            log_warning(f"工作流状态不是 WAITING，忽略确认回调 (当前: {self._state.value})")
+        if self._state != self.State.WAITING_FOR_CONFIRM:
+            log_warning(f"工作流状态不是 WAITING_FOR_CONFIRM，忽略确认回调 (当前: {self._state.value})")
             return
 
         if confirmed_ok:
-            # 操作员确认为 OK
+            # 操作员确认为 OK：不保存错误图片
             self._ok_count += 1
             self.ok_count_changed.emit(self._ok_count)
             log_info("手工确认: OK")
             self.all_results_ready.emit(True, self._results)
         else:
-            # 操作员确认为 NG
+            # 操作员确认为 NG：保存所有 NG 位置的错误图片和检测数据
             self._ng_count += 1
             self.ng_count_changed.emit(self._ng_count)
             log_info("手工确认: NG")
+            self._save_ng_error_data()
             self.all_results_ready.emit(False, self._results)
 
         log_info(f"最终结果: {'OK' if confirmed_ok else 'NG'} "
                  f"(触发: {self._trigger_count}, OK: {self._ok_count}, NG: {self._ng_count})")
 
+        # 通知 UI 关闭 NG 确认弹窗
+        self.ng_confirm_closed.emit()
+
         # 自动继续监听
         self._set_state(self.State.MONITORING)
+
+    def _save_ng_error_data(self):
+        """保存所有 NG 位置的错误图片和检测数据到 ERRORS_DIR"""
+        product_name = self._product_config.get("name", "未知产品") if self._product_config else "未知产品"
+        for result in self._results:
+            if not result.passed and result.raw_image is not None:
+                try:
+                    self._vision_engine.save_error_data(
+                        scheme_name=product_name,
+                        product_id="",
+                        raw_image=result.raw_image,
+                        annotated_image=result.annotated,
+                        results=result.tool_results,
+                    )
+                except Exception as e:
+                    log_error(f"保存 NG 位置 [{result.name}] 错误数据失败: {e}")
 
     # ── 错误处理 ──
 
