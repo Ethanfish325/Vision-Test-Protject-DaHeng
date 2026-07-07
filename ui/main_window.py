@@ -606,6 +606,9 @@ class MainWindow(QMainWindow):
             vision_engine=self.vision_engine,
             parent=self
         )
+        # 传入串口通信管理器（用于扫描头）
+        if self._serial_comm is not None:
+            self._inspection_workflow.set_serial_comm(self._serial_comm)
 
     def _build_engineer_page(self):
         page = QWidget()
@@ -2925,16 +2928,19 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         QMessageBox.about(self, "关于",
-                          "<h3>视觉检测系统</h3>"
-                          "<p>版本: 2.0</p>"
+                          "<h3>视觉检测系统 VisionTest 2.0</h3>"
+                          "<p>版本: 2.0.0</p>"
                           "<p>基于 OpenCV + PyQt5 的视觉识别系统</p>"
-                          "<p>支持流水线式视觉工具链设计</p>")
+                          "<p>支持流水线式视觉工具链设计</p>")                          
 
     def _open_serial_dialog(self):
         """打开串口通信窗口（共享 SerialCommManager 实例）。"""
         from .widgets.serial_dialog import SerialDialog
         if self._serial_comm is None:
             self._serial_comm = SerialCommManager()
+            # 将串口管理器设置到自动化检测工作流（用于扫描头）
+            if self._inspection_workflow is not None:
+                self._inspection_workflow.set_serial_comm(self._serial_comm)
         dialog = SerialDialog(self, comm_mgr=self._serial_comm)
         dialog.exec_()
         # 对话框关闭后，根据串口状态更新自动测试按钮
@@ -3193,8 +3199,8 @@ class ProductConfigDialog(QDialog):
         self._config = None
 
         self.setWindowTitle("新建产品配置" if mode == "new" else f"编辑产品 - {product_name}")
-        self.setMinimumSize(640, 520)
-        self.resize(780, 600)
+        self.setMinimumSize(640, 640)
+        self.resize(780, 720)
         self.setStyleSheet("""
             QDialog { background-color: #2d2d2d; }
             QLabel { color: #d4d4d4; font-size: 15px; }
@@ -3303,6 +3309,35 @@ class ProductConfigDialog(QDialog):
         di_layout.addRow("DI 输入位:", self._edit_di_bit)
 
         layout.addWidget(di_group)
+
+        # ── 扫码配置 ──
+        scan_group = QGroupBox("一维码扫码配置")
+        scan_layout = QFormLayout(scan_group)
+        scan_layout.setSpacing(6)
+
+        barcode_cfg = self._config.get("barcode_scan", {}) if self._config else {}
+
+        self._scan_enabled_cb = QCheckBox("启用扫码")
+        self._scan_enabled_cb.setChecked(barcode_cfg.get("enabled", False))
+        self._scan_enabled_cb.setStyleSheet("color: #d4d4d4; font-size: 15px; spacing: 8px;")
+        scan_layout.addRow("", self._scan_enabled_cb)
+
+        self._scan_position = QSpinBox()
+        self._scan_position.setRange(-1000000, 1000000)
+        self._scan_position.setValue(barcode_cfg.get("position", 0))
+        scan_layout.addRow("扫码位坐标:", self._scan_position)
+
+        self._scan_command = QLineEdit(barcode_cfg.get("command", "01 54 04"))
+        self._scan_command.setPlaceholderText("如: 01 54 04")
+        scan_layout.addRow("扫描命令(HEX):", self._scan_command)
+
+        self._scan_timeout = QSpinBox()
+        self._scan_timeout.setRange(1000, 60000)
+        self._scan_timeout.setValue(barcode_cfg.get("timeout_ms", 5000))
+        self._scan_timeout.setSuffix(" ms")
+        scan_layout.addRow("扫码超时:", self._scan_timeout)
+
+        layout.addWidget(scan_group)
 
         # ── 位置列表 ──
         pos_group = QGroupBox("检测位置")
@@ -3459,6 +3494,12 @@ class ProductConfigDialog(QDialog):
         config = {
             "name": name,
             "description": self._edit_desc.text().strip(),
+            "barcode_scan": {
+                "enabled": self._scan_enabled_cb.isChecked(),
+                "position": self._scan_position.value(),
+                "command": self._scan_command.text().strip() or "01 54 04",
+                "timeout_ms": self._scan_timeout.value()
+            },
             "camera": {
                 "exposure_time": int(self._edit_exposure.value()),
                 "gain": self._edit_gain.value()

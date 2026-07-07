@@ -1,6 +1,12 @@
 {
   "name": "默认产品",
   "description": "默认产品配置，可根据实际需求修改",
+  "barcode_scan": {
+    "enabled": true,
+    "position": -10000,
+    "command": "01 54 04",
+    "timeout_ms": 5000
+  },
   "camera": {
     "exposure_time": 18000,
     "gain": 0.0
@@ -13,11 +19,6 @@
     "move_timeout_s": 10
   },
   "di_bit": 3,
-  "di_bit_ok": 0,
-  "di_bit_ng": 1,
-  "di_bit_reset": 2,
-  "reset_speed": 20000,
-  "reset_acc": 10000,
   "poll_interval_ms": 50,
   "positions": [
     {

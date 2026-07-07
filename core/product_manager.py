@@ -131,6 +131,13 @@ def create_default_config(name: str) -> Dict[str, Any]:
         "name": name,
         "description": "",
 
+        "barcode_scan": {
+            "enabled": False,
+            "position": 0,
+            "command": "01 54 04",
+            "timeout_ms": 5000
+        },
+
         "camera": {
             "exposure_time": 18000,
             "gain": 0,

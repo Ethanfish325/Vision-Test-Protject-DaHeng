@@ -302,6 +302,7 @@ class NMCSDK:
         self._dll: Optional[ctypes.CDLL] = None
         self._dll_path = dll_path or self.DLL_FILENAME
         self._is_open = False
+        self._connected = False  # 连接状态（与 _is_open 同步管理）
         self._station_count = 0
         self._station_types: List[int] = []
         self._station_numbers: List[int] = []
@@ -593,6 +594,7 @@ class NMCSDK:
         self._station_types = [int(type_array[i]) for i in range(station_count)]
 
         self._is_open = True
+        self._connected = True
         return self._station_count, self._station_numbers, self._station_types
 
     def connect(
@@ -658,6 +660,7 @@ class NMCSDK:
         ret = self._dll.MCF_Close_Net()
         if ret == 0:
             self._is_open = False
+            self._connected = False
             self._station_count = 0
             self._station_numbers = []
             self._station_types = []

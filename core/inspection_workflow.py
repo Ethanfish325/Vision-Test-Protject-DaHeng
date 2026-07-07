@@ -33,6 +33,7 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 from core.nmc_sdk import NMCSDK, Axis_Stop_IMD, Axis_Stop_DEC, Position_Absolute, Position_Opposite, Profile_S
 from core.log_manager import log_info, log_error, log_warning
+from core.serial_comm import SerialCommManager
 
 
 # ============================================================================
@@ -87,6 +88,7 @@ class InspectionWorkflow(QObject):
         MONITORING = "等待DI触发"
         WAITING = "等待工件放稳"
         MOVING = "移动中"
+        SCANNING = "扫码中"       # 新增：移动到扫码位并扫描一维码
         CAPTURING = "拍照中"
         TESTING = "检测中"
         RETURNING = "退回原点"
@@ -130,6 +132,9 @@ class InspectionWorkflow(QObject):
 
     reset_during_confirm = pyqtSignal()
     """D3复位时发射，通知UI关闭NG确认弹窗"""
+
+    barcode_failed = pyqtSignal()
+    """扫码失败信号 - 扫码超时或返回 NG 时发射，通知 UI 弹出提示"""
 
     def __init__(self, nmc_sdk: Optional[NMCSDK] = None,
                  camera_mgr=None, vision_engine=None,
@@ -187,6 +192,18 @@ class InspectionWorkflow(QObject):
 
         # 一次检测的总耗时计时
         self._inspection_start_time: float = 0.0
+
+        # ── 一维码扫码相关 ──
+        self._serial_comm: Optional[SerialCommManager] = None
+        """串口通信管理器（用于扫描头）"""
+        self._barcode_data: Optional[str] = None
+        """扫描到的一维码数据"""
+        self._is_scan_move: bool = False
+        """标记当前移动是否为扫码移动（到位后区分处理）"""
+        # 扫码超时定时器
+        self._scan_timer = QTimer(self)
+        self._scan_timer.setSingleShot(True)
+        self._scan_timer.timeout.connect(self._on_scan_timeout)
 
     # ── 属性 ──
 
@@ -316,6 +333,7 @@ class InspectionWorkflow(QObject):
         self._poll_timer.stop()
         self._arrive_timer.stop()
         self._start_delay_timer.stop()
+        self._scan_timer.stop()
         self._running = False
         self._set_state(self.State.IDLE)
         log_info("停止监听 DI 信号")
@@ -325,6 +343,7 @@ class InspectionWorkflow(QObject):
         self._poll_timer.stop()
         self._arrive_timer.stop()
         self._start_delay_timer.stop()
+        self._scan_timer.stop()
 
         if self._nmc_sdk and self._nmc_sdk.is_open():
             try:
@@ -419,6 +438,7 @@ class InspectionWorkflow(QObject):
         self._poll_timer.stop()
         self._arrive_timer.stop()
         self._start_delay_timer.stop()
+        self._scan_timer.stop()
 
         # 2) 如果当前在 NG 确认等待状态，通知 UI 关闭弹窗
         if self._state == self.State.WAITING_FOR_CONFIRM:
@@ -503,9 +523,16 @@ class InspectionWorkflow(QObject):
         self._start_delay_timer.start(1000)  # 1 秒
 
     def _on_start_delay_elapsed(self):
-        """延时结束 - 开始移动到第一个位置"""
-        log_info("延时结束，开始执行检测流程")
-        self._execute_current_position()
+        """延时结束 - 判断是否需要先扫码，然后开始检测流程"""
+        # 检查是否启用了扫码功能
+        barcode_cfg = self._product_config.get("barcode_scan", {})
+        if barcode_cfg.get("enabled", False):
+            scan_pos = barcode_cfg.get("position", 0)
+            log_info(f"延时结束，移动到扫码位 (坐标: {scan_pos})")
+            self._move_to_scan_position(scan_pos)
+        else:
+            log_info("延时结束，开始执行检测流程")
+            self._execute_current_position()
 
     # ── 位置执行 ──
 
@@ -593,6 +620,10 @@ class InspectionWorkflow(QObject):
                 # 根据当前状态决定到位后的处理
                 if self._state == self.State.RETURNING:
                     self._on_returned_to_origin()
+                elif self._is_scan_move:
+                    # 扫码移动到位
+                    self._is_scan_move = False
+                    self._on_arrived_at_scan_position()
                 else:
                     self._on_arrived()
                 return
@@ -804,7 +835,11 @@ class InspectionWorkflow(QObject):
         self.total_elapsed_changed.emit(total_elapsed)
 
         # 计算最终结果（所有位置都通过才算 OK）
-        all_passed = all(r.passed for r in self._results)
+        # 注意：空列表（如扫码失败时）应视为 NG
+        if not self._results:
+            all_passed = False
+        else:
+            all_passed = all(r.passed for r in self._results)
 
         if all_passed:
             # OK：直接更新统计并继续
@@ -858,17 +893,28 @@ class InspectionWorkflow(QObject):
         self._set_state(self.State.MONITORING)
 
     def _save_ng_error_data(self):
-        """保存所有 NG 位置的错误图片和检测数据到 ERRORS_DIR"""
+        """保存所有 NG 位置的错误图片到 ERRORS_DIR
+
+        目录结构:
+            errors/
+                YYYY-MM-DD/
+                    {ID号}/                      # 以扫描到的ID号（一维码）为文件夹名
+                        {ID号}_{HHMMSS}_raw.jpg    # 原始图
+                        {ID号}_{HHMMSS}_result.jpg # 标注结果图
+                        相同ID号的所有NG记录都放在同一个文件夹下
+        """
         product_name = self._product_config.get("name", "未知产品") if self._product_config else "未知产品"
+        barcode = self._barcode_data or "NO_BARCODE"
         for result in self._results:
             if not result.passed and result.raw_image is not None:
                 try:
                     self._vision_engine.save_error_data(
                         scheme_name=product_name,
-                        product_id="",
+                        product_id=barcode,
                         raw_image=result.raw_image,
                         annotated_image=result.annotated,
                         results=result.tool_results,
+                        custom_prefix=barcode,  # 使用一维码作为文件夹名
                     )
                 except Exception as e:
                     log_error(f"保存 NG 位置 [{result.name}] 错误数据失败: {e}")
@@ -895,7 +941,285 @@ class InspectionWorkflow(QObject):
         self.stop_monitoring()
         self._poll_timer.stop()
         self._arrive_timer.stop()
+        self._scan_timer.stop()
         self._pipelines = []
         self._product_config = None
         self._results = []
+        self._barcode_data = None
+        # 断开串口数据接收信号
+        if self._serial_comm is not None:
+            try:
+                self._serial_comm.data_received.disconnect(self._on_barcode_data_received)
+            except (TypeError, RuntimeError):
+                pass
+            self._serial_comm = None
         log_info("工作流资源已清理")
+
+    # ── 一维码扫码相关方法 ──
+
+    def set_serial_comm(self, comm: Optional[SerialCommManager]):
+        """设置串口通信管理器（用于扫描头）
+
+        Args:
+            comm: SerialCommManager 实例，为 None 时断开连接
+        """
+        # 断开旧连接
+        if self._serial_comm is not None:
+            try:
+                self._serial_comm.data_received.disconnect(self._on_barcode_data_received)
+            except (TypeError, RuntimeError):
+                pass
+
+        self._serial_comm = comm
+
+        # 连接新信号
+        if comm is not None:
+            comm.data_received.connect(self._on_barcode_data_received)
+            log_info("串口通信管理器已设置（用于一维码扫描）")
+
+    def _move_to_scan_position(self, target_pos: int):
+        """移动到扫码位
+
+        Args:
+            target_pos: 扫码位的轴坐标
+        """
+        self._set_state(self.State.MOVING)
+        self._move_target = target_pos
+        self._is_scan_move = True
+
+        try:
+            axis = self._config.axis
+
+            # 1) 确保轴已使能
+            try:
+                self._nmc_sdk.set_servo_enable(axis, 1)
+            except Exception as e:
+                log_warning(f"轴{axis + 1} 使能失败(可忽略): {e}")
+
+            # 2) 清除轴状态
+            try:
+                self._nmc_sdk.clear_axis_state(axis)
+            except Exception as e:
+                log_warning(f"清除轴{axis + 1} 状态失败(可忽略): {e}")
+
+            # 3) 读取当前位置，计算相对位移
+            try:
+                current_pos = self._nmc_sdk.get_position(axis)
+            except Exception:
+                current_pos = 0
+            diff = target_pos - current_pos
+            log_info(f"扫码移动: 轴{axis + 1} 当前位置: {current_pos}, 目标: {target_pos}, 相对位移: {diff}")
+
+            # 4) 设置速度参数
+            ret_profile = self._nmc_sdk.set_axis_profile(
+                axis,
+                0,                      # v_ini
+                self._config.v_max,     # v_max
+                self._config.a_max,     # a_max
+                0,                      # jerk
+                0,                      # v_end
+                Profile_S               # S曲线
+            )
+            log_info(f"扫码移动: set_axis_profile 返回值: {ret_profile}")
+
+            # 5) 发送相对位置运动指令
+            ret_move = self._nmc_sdk.uniaxial_long(axis, diff, Position_Opposite)
+            log_info(f"扫码移动: uniaxial_long(相对, dist={diff}) 返回值: {ret_move}")
+
+            if ret_move != 0:
+                error_msg = f"扫码移动失败，返回值: {ret_move}"
+                log_error(error_msg)
+                self._on_error(error_msg)
+                return
+
+            # 6) 启动到位检测
+            import time
+            self._arrive_start_time = int(time.time() * 1000)
+            self._arrive_timer.start(self._config.arrive_check_interval_ms)
+
+        except Exception as e:
+            error_msg = f"扫码移动失败: {e}"
+            log_error(error_msg)
+            self._on_error(error_msg)
+
+    def _on_arrived_at_scan_position(self):
+        """到达扫码位 - 发送扫描命令触发扫描头"""
+        self._set_state(self.State.SCANNING)
+
+        barcode_cfg = self._product_config.get("barcode_scan", {})
+        command = barcode_cfg.get("command", "01 54 04")
+        timeout_ms = barcode_cfg.get("timeout_ms", 5000)
+
+        if self._serial_comm is not None and self._serial_comm.is_open:
+            # 发送 HEX 扫描命令
+            count = self._serial_comm.send_hex(command)
+            if count > 0:
+                log_info(f"已发送扫描命令: {command} ({count} 字节)")
+                # 启动超时定时器
+                self._scan_timer.start(timeout_ms)
+                log_info(f"等待扫码返回 (超时: {timeout_ms}ms)...")
+            else:
+                log_error("发送扫描命令失败")
+                self._on_barcode_failed()
+        else:
+            log_error("串口未打开，无法扫码")
+            self._on_barcode_failed()
+
+    def _on_barcode_data_received(self, data: bytes):
+        """接收到串口数据 - 解析一维码
+
+        仅在 SCANNING 状态下处理，解析 ASCII 文本并去除 \\r\\n。
+        扫描头在没有条码时会返回 "NG"，此时视为扫码失败。
+
+        Args:
+            data: 收到的原始字节数据
+        """
+        if self._state != self.State.SCANNING:
+            # 非扫码状态收到的串口数据，忽略
+            return
+
+        # 停止超时定时器
+        self._scan_timer.stop()
+
+        try:
+            # 解析 ASCII 文本，去除首尾空白（包括 \\r\\n）
+            raw_text = data.decode('ascii', errors='replace').strip()
+            # 过滤掉不可见字符和控制字符，只保留可打印字符
+            barcode = ''.join(c for c in raw_text if c.isprintable()).strip()
+
+            # 判断是否为有效一维码：
+            # 1. 非空
+            # 2. 长度 >= 3
+            # 3. 不是 "NG"（扫描头在没有条码时返回 "NG"）
+            if (barcode
+                    and len(barcode) >= 3
+                    and barcode.upper() != "NG"):
+                self._barcode_data = barcode
+                log_info(f"扫码成功: {barcode}")
+                # 扫码成功，开始执行检测位置
+                self._current_pos_index = 0
+                self._execute_current_position()
+            else:
+                log_warning(f"扫码失败: 返回={raw_text!r} (过滤后={barcode!r})")
+                self._on_barcode_failed()
+        except Exception as e:
+            log_error(f"解析一维码失败: {e}")
+            self._on_barcode_failed()
+
+    def _on_scan_timeout(self):
+        """扫码超时 - 未收到扫描头返回数据"""
+        log_error("扫码超时：未收到一维码数据")
+        self._on_barcode_failed()
+
+    def _on_barcode_failed(self):
+        """扫码失败处理 - 退回原点，发射扫码失败信号，不保存错误图片"""
+        self._barcode_data = None
+        log_info("扫码失败，退回原点，等待重新放入工件")
+
+        # 注意：_trigger_count 已在 _on_di_triggered 中加过，这里不再重复加
+        # 更新 NG 计数
+        self._ng_count += 1
+        self.ng_count_changed.emit(self._ng_count)
+
+        # 发射扫码失败信号（UI 层弹出提示）
+        self.barcode_failed.emit()
+
+        # 不保存错误图片，直接退回原点并回到 MONITORING 状态
+        # 扫码失败不需要人工确认 NG，直接继续监听
+        self._return_to_origin_skip_result()
+
+    def _return_to_origin_skip_result(self):
+        """退回原点但不显示结果（用于扫码失败场景），到位后直接回到 MONITORING"""
+        self._set_state(self.State.RETURNING)
+        log_info(f"扫码失败: 退回原点 (坐标: {self._config.origin_position})")
+
+        # 先停止到位检测计时器
+        self._arrive_timer.stop()
+
+        # 发送回原点运动指令
+        self._move_target = self._config.origin_position
+        try:
+            axis = self._config.axis
+
+            # 1) 确保轴已使能
+            try:
+                self._nmc_sdk.set_servo_enable(axis, 1)
+            except Exception as e:
+                log_warning(f"轴{axis + 1} 使能失败(可忽略): {e}")
+
+            # 2) 清除轴状态
+            try:
+                self._nmc_sdk.clear_axis_state(axis)
+            except Exception as e:
+                log_warning(f"清除轴{axis + 1} 状态失败(可忽略): {e}")
+
+            # 3) 读取当前位置，计算相对位移
+            try:
+                current_pos = self._nmc_sdk.get_position(axis)
+            except Exception:
+                current_pos = 0
+            diff = self._config.origin_position - current_pos
+            log_info(f"轴{axis + 1} 当前位置: {current_pos}, 原点目标: {self._config.origin_position}, 相对位移: {diff}")
+
+            # 4) 设置速度参数
+            ret_profile = self._nmc_sdk.set_axis_profile(
+                axis,
+                0,                      # v_ini
+                self._config.v_max,     # v_max
+                self._config.a_max,     # a_max
+                0,                      # jerk
+                0,                      # v_end
+                Profile_S               # S曲线
+            )
+            log_info(f"set_axis_profile 返回值: {ret_profile}")
+
+            # 5) 发送相对位置运动指令
+            ret_move = self._nmc_sdk.uniaxial_long(axis, diff, Position_Opposite)
+            log_info(f"uniaxial_long(相对, dist={diff}) 返回值: {ret_move}")
+
+            if ret_move != 0:
+                error_msg = f"退回原点失败，返回值: {ret_move}"
+                log_error(error_msg)
+                # 运动失败也直接回到 MONITORING
+                self._set_state(self.State.MONITORING)
+                return
+
+            # 6) 启动到位检测（使用 _check_arrival_skip_result 处理）
+            import time
+            self._arrive_start_time = int(time.time() * 1000)
+            # 临时替换到位回调，使用定时器单次检测
+            self._arrive_timer.timeout.disconnect(self._check_arrival)
+            self._arrive_timer.timeout.connect(self._check_arrival_skip_result)
+            self._arrive_timer.start(self._config.arrive_check_interval_ms)
+        except Exception as e:
+            log_error(f"退回原点运动失败: {e}")
+            # 运动失败也直接回到 MONITORING
+            self._set_state(self.State.MONITORING)
+
+    def _check_arrival_skip_result(self):
+        """到位检测（扫码失败回原点专用）- 到位后直接回到 MONITORING"""
+        try:
+            state = self._nmc_sdk.get_axis_state(self._config.axis)
+            if state == 0:  # 空闲 = 到位
+                self._arrive_timer.stop()
+                # 恢复原来的到位检测回调
+                self._arrive_timer.timeout.disconnect(self._check_arrival_skip_result)
+                self._arrive_timer.timeout.connect(self._check_arrival)
+                log_info(f"扫码失败: 轴已退回原点")
+                # 直接回到 MONITORING，不显示结果
+                self._set_state(self.State.MONITORING)
+                return
+
+            # 超时检查
+            import time
+            elapsed = int(time.time() * 1000) - self._arrive_start_time
+            if elapsed > self._config.move_timeout_ms:
+                self._arrive_timer.stop()
+                # 恢复原来的到位检测回调
+                self._arrive_timer.timeout.disconnect(self._check_arrival_skip_result)
+                self._arrive_timer.timeout.connect(self._check_arrival)
+                log_error("扫码失败回原点超时")
+                # 超时也直接回到 MONITORING
+                self._set_state(self.State.MONITORING)
+        except Exception as e:
+            log_error(f"到位检测失败: {e}")

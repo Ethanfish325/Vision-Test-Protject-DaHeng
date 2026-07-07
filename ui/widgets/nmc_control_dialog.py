@@ -329,6 +329,10 @@ class NMCControlDialog(QDialog):
         self.setMinimumSize(900, 680)
         self.resize(960, 720)
 
+        # 初始化时检测 SDK 是否已连接，自动更新 UI 状态
+        if self.sdk._connected:
+            self._update_connection_state(True)
+
     # ──────────────────────────────────────────────
     # UI 构建
     # ──────────────────────────────────────────────
@@ -1048,8 +1052,8 @@ class NMCControlDialog(QDialog):
             pass
 
     def _update_connection_state(self, connected: bool):
-        """更新连接状态显示"""
-        self.sdk._connected = connected
+        """更新连接状态显示（不再直接修改 sdk._connected，由 SDK 自身管理）"""
+        self._connected = connected
         self.btn_connect.setEnabled(not connected)
         self.btn_disconnect.setEnabled(connected)
         self.btn_emergency.setEnabled(connected)
@@ -1778,15 +1782,13 @@ class NMCControlDialog(QDialog):
     #  窗口事件
     # =====================================================================
     def closeEvent(self, event):
-        """窗口关闭事件"""
+        """窗口关闭事件 - 只停止定时器，不断开 NMC 连接"""
         if self._homing:
             self._on_home_stop()
-        if self.sdk._connected:
-            try:
-                self._refresh_timer.stop()
-                self.sdk.close_net()
-            except Exception:
-                pass
+        # 停止刷新定时器（窗口关闭后无需刷新 UI）
+        self._refresh_timer.stop()
+        # 不再断开 NMC 连接：如果 SDK 是外部传入的共享实例，断开会影响其他组件
+        # 如果 SDK 是内部创建的（_external_sdk=False），也不断开，保持与初始化逻辑一致
         self.nmc_connected.emit(False)
         event.accept()
 

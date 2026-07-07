@@ -191,45 +191,53 @@ class VisionEngine:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
     def save_error_data(self, scheme_name, product_id, raw_image,
-                        annotated_image, results):
+                        annotated_image, results, custom_prefix=None):
         """
-        保存检测失败的原始图、结果图和 JSON 数据到 ERRORS_DIR。
-        由调用方在确认 NG 后调用（自动化流程在人工确认 NG 后调用，
-        设计模式不调用）。
+        保存检测失败的原始图和标注图到 ERRORS_DIR。
+
+        目录结构:
+            errors/
+                YYYY-MM-DD/                    # 以天为单位的文件夹
+                    {ID号}/                     # 以扫描到的ID号（一维码）为文件夹名
+                        {ID号}_{HHMMSS}_raw.jpg     # 原始图（ID号+时间）
+                        {ID号}_{HHMMSS}_result.jpg  # 标注结果图（ID号+时间）
+                        相同ID号的所有NG记录都放在同一个文件夹下
+
+        Args:
+            scheme_name: 方案名称
+            product_id: 产品ID（一维码数据）
+            raw_image: 原始图像
+            annotated_image: 标注图像
+            results: 检测结果列表（不再保存为 JSON）
+            custom_prefix: 自定义前缀（如一维码），用于文件夹和文件名
         """
         try:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            date_str = time.strftime("%Y-%m-%d")
+            time_obj = time.localtime()
+            date_str = time.strftime("%Y-%m-%d", time_obj)
+            time_str = time.strftime("%H-%M-%S", time_obj)
+
+            # 以天为单位的目录
             date_dir = os.path.join(ERRORS_DIR, date_str)
-            os.makedirs(date_dir, exist_ok=True)
 
-            safe_name = scheme_name.replace("/", "_").replace("\\", "_") or "未命名"
-            prefix = f"{safe_name}_{timestamp}"
+            # 以ID号（一维码）为文件夹名
+            if custom_prefix:
+                safe_id = custom_prefix.replace("/", "_").replace("\\", "_").replace(" ", "_") or "UNKNOWN"
+            else:
+                safe_id = product_id.replace("/", "_").replace("\\", "_").replace(" ", "_") or "UNKNOWN"
 
-            raw_path = os.path.join(date_dir, f"{prefix}_raw.jpg")
+            # 文件夹路径：errors/YYYY-MM-DD/{ID号}/
+            error_dir = os.path.join(date_dir, safe_id)
+            os.makedirs(error_dir, exist_ok=True)
+
+            # 图片文件名：{ID号}_{时间}_raw.jpg
+            file_prefix = f"{safe_id}_{time_str}"
+            raw_path = os.path.join(error_dir, f"{file_prefix}_raw.jpg")
             cv2.imwrite(raw_path, raw_image)
 
-            result_path = os.path.join(date_dir, f"{prefix}_result.jpg")
+            result_path = os.path.join(error_dir, f"{file_prefix}_result.jpg")
             cv2.imwrite(result_path, annotated_image)
 
-            json_path = os.path.join(date_dir, f"{prefix}.json")
-            error_data = {
-                "scheme": scheme_name,
-                "product_id": product_id,
-                "timestamp": timestamp,
-                "results": []
-            }
-            for r in results:
-                error_data["results"].append({
-                    "success": r.success,
-                    "passed": r.passed,
-                    "message": r.message,
-                    "data": {k: (float(v) if isinstance(v, (np.floating,)) else
-                                 int(v) if isinstance(v, (np.integer,)) else v)
-                             for k, v in r.data.items()}
-                })
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(error_data, f, ensure_ascii=False, indent=2)
+            log_info(f"错误图片已保存: {error_dir}")
 
         except Exception as e:
             log_error(f"保存错误数据失败: {e}")

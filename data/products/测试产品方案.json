@@ -1,6 +1,12 @@
 {
   "name": "测试产品方案",
   "description": "",
+  "barcode_scan": {
+    "enabled": true,
+    "position": -60000,
+    "command": "01 54 04",
+    "timeout_ms": 5000
+  },
   "camera": {
     "exposure_time": 18000,
     "gain": 0.0

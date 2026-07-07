@@ -53,7 +53,7 @@ def list_ports() -> List[Dict[str, Any]]:
 # ──────────────────────────────────────────────
 
 BAUDRATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
-DEFAULT_BAUDRATE = 115200
+DEFAULT_BAUDRATE = 9600
 
 DATA_BITS = {
     5: serial.FIVEBITS,

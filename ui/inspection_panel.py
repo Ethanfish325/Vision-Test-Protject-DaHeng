@@ -473,6 +473,7 @@ class InspectionPanel(QWidget):
         self._workflow.ng_confirm_closed.connect(self._on_ng_confirm_closed)
         self._workflow.reset_during_confirm.connect(self._on_reset_during_confirm)
         self._workflow.total_elapsed_changed.connect(self._on_total_elapsed_changed)
+        self._workflow.barcode_failed.connect(self._on_barcode_failed)
 
     def _refresh_product_list(self):
         """刷新产品列表"""
@@ -616,11 +617,14 @@ class InspectionPanel(QWidget):
         state_names = {
             InspectionWorkflow.State.IDLE: "空闲",
             InspectionWorkflow.State.MONITORING: "等待DI触发",
+            InspectionWorkflow.State.WAITING: "等待工件放稳",
             InspectionWorkflow.State.MOVING: "移动中",
+            InspectionWorkflow.State.SCANNING: "扫码中",
             InspectionWorkflow.State.CAPTURING: "拍照中",
             InspectionWorkflow.State.TESTING: "检测中",
             InspectionWorkflow.State.RETURNING: "退回原点",
             InspectionWorkflow.State.SHOW_RESULT: "显示结果",
+            InspectionWorkflow.State.WAITING_FOR_CONFIRM: "等待确认",
             InspectionWorkflow.State.ERROR: "错误",
         }
 
@@ -637,6 +641,7 @@ class InspectionPanel(QWidget):
             bg = "#1a2a3a"
             border = "#4A90D9"
         elif state in (InspectionWorkflow.State.MOVING,
+                       InspectionWorkflow.State.SCANNING,
                        InspectionWorkflow.State.CAPTURING,
                        InspectionWorkflow.State.TESTING,
                        InspectionWorkflow.State.RETURNING):
@@ -893,6 +898,39 @@ class InspectionPanel(QWidget):
             minutes = int(elapsed_seconds // 60)
             seconds = elapsed_seconds % 60
             self._total_elapsed_label.setText(f"耗时: {minutes}m {seconds:.1f}s")
+
+    def _on_barcode_failed(self):
+        """扫码失败 - 弹出提示弹窗，通知操作员重新放入工件"""
+        self._append_log("⚠️ 扫码失败，请重新放入工件")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("扫码失败")
+        msg.setText("⚠️ 未扫描到有效一维码\n\n请重新放入工件，确保条码对准扫描头")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.button(QMessageBox.Ok).setText("确定")
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #2d2d2d;
+            }
+            QLabel {
+                color: #d4d4d4;
+                font-size: 15px;
+            }
+            QPushButton {
+                background-color: #3c3c3c;
+                color: #d4d4d4;
+                padding: 6px 24px;
+                border: 1px solid #555;
+                border-radius: 3px;
+                font-size: 14px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border-color: #4A90D9;
+            }
+        """)
+        msg.exec_()
 
     # ── 日志 ──
 
