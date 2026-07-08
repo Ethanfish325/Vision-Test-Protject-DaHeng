@@ -529,21 +529,21 @@ class NMCControlDialog(QDialog):
         layout.addWidget(sys_group)
 
         # ── 轴使能控制 ──
-        enable_group = QGroupBox("轴使能控制")
+        enable_group = QGroupBox("轴使能控制 (仅 Axis_2)")
         enable_group.setStyleSheet(self._group_box_style())
         enable_layout = QHBoxLayout(enable_group)
         enable_layout.setSpacing(8)
 
-        self.btn_enable_all = QPushButton("全部使能")
+        self.btn_enable_all = QPushButton("Axis_2 使能")
         self.btn_enable_all.setStyleSheet(self._action_btn_style("#388E3C"))
         self.btn_enable_all.setEnabled(False)
-        self.btn_enable_all.clicked.connect(lambda: self._on_enable_all(True))
+        self.btn_enable_all.clicked.connect(lambda: self._on_enable_axis2(True))
         enable_layout.addWidget(self.btn_enable_all)
 
-        self.btn_disable_all = QPushButton("全部关闭")
+        self.btn_disable_all = QPushButton("Axis_2 关闭")
         self.btn_disable_all.setStyleSheet(self._action_btn_style("#C62828"))
         self.btn_disable_all.setEnabled(False)
-        self.btn_disable_all.clicked.connect(lambda: self._on_enable_all(False))
+        self.btn_disable_all.clicked.connect(lambda: self._on_enable_axis2(False))
         enable_layout.addWidget(self.btn_disable_all)
 
         enable_layout.addStretch()
@@ -1000,22 +1000,19 @@ class NMCControlDialog(QDialog):
             self.log.error(f"连接失败: {e}")
 
     def _auto_setup_soft_limits(self):
-        """自动设置各轴的软限位（基于当前编码器位置 ± 安全范围）"""
+        """自动设置 Axis_2 的软限位（仅控制 Axis_2，其他轴不动）"""
         if not self.sdk._connected:
             return
-        soft_limits = {
-            AXIS_VALUES[0]: (2000, -60000),
-            AXIS_VALUES[1]: (2000, -60000),
-            AXIS_VALUES[2]: (2000, -60000),
-            AXIS_VALUES[3]: (1000000, -1000000),
-        }
-        for axis, (pos, neg) in soft_limits.items():
-            try:
-                self.sdk.set_soft_limit(axis, pos, neg)
-                self.sdk.set_soft_limit_enable(axis, 1)
-                self.log.info(f"Axis_{axis} 软限位已自动设置: [{neg}, {pos}]")
-            except Exception as e:
-                self.log.warning(f"Axis_{axis} 自动设置软限位失败: {e}")
+        # 仅设置 Axis_2 (索引1) 的软限位
+        axis = Axis_2
+        pos_limit = 2000
+        neg_limit = -60000
+        try:
+            self.sdk.set_soft_limit(axis, pos_limit, neg_limit)
+            self.sdk.set_soft_limit_enable(axis, 1)
+            self.log.info(f"Axis_2 软限位已自动设置: [{neg_limit}, {pos_limit}]")
+        except Exception as e:
+            self.log.warning(f"Axis_2 自动设置软限位失败: {e}")
 
     def _on_disconnect(self):
         """断开控制卡连接"""
@@ -1028,14 +1025,14 @@ class NMCControlDialog(QDialog):
         self._update_connection_state(False)
 
     def _on_emergency_stop(self):
-        """紧急停止所有轴"""
+        """紧急停止 Axis_2（其他轴不受影响）"""
         if not self.sdk._connected:
             return
         try:
-            self.log.warning("⚠ 紧急停止所有轴!")
-            self.sdk.emergency_stop_all()
+            self.log.warning("⚠ 紧急停止 Axis_2!")
+            self.sdk.emergency_stop_axis2()
         except Exception as e:
-            self.log.error(f"紧急停止失败: {e}")
+            self.log.error(f"Axis_2 紧急停止失败: {e}")
 
     # =====================================================================
     #  定时器回调
@@ -1208,15 +1205,15 @@ class NMCControlDialog(QDialog):
     # =====================================================================
     #  全部使能
     # =====================================================================
-    def _on_enable_all(self, enable: bool):
-        """使能/关闭所有轴"""
+    def _on_enable_axis2(self, enable: bool):
+        """仅使能/关闭 Axis_2，其他轴保持不变"""
         if not self.sdk._connected:
             return
         try:
-            self.sdk.enable_all_servos(enable)
-            self.log.info(f"所有轴伺服{'已使能' if enable else '已关闭'}")
+            self.sdk.enable_axis2_servo(enable)
+            self.log.info(f"Axis_2 伺服{'已使能' if enable else '已关闭'} (其他轴保持不变)")
         except Exception as e:
-            self.log.error(f"使能所有轴失败: {e}")
+            self.log.error(f"Axis_2 伺服{'使能' if enable else '关闭'}失败: {e}")
 
     # =====================================================================
     #  回零

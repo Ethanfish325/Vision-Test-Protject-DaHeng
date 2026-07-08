@@ -4,84 +4,229 @@ import csv
 import json
 import os
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Any
 
-from core.paths import ERRORS_DIR, LOGS_DIR
+import cv2
+import numpy as np
+
+from core.paths import PRODUCTION_DATA_DIR
+
+
+def _tool_results_to_serializable(results: List[Any]) -> List[dict]:
+    """将 ToolResult 对象列表转换为可 JSON 序列化的 dict 列表
+
+    ToolResult 包含 numpy.ndarray 等不可序列化的字段，
+    此函数只提取可序列化的标量/字符串/字典数据。
+    """
+    serializable = []
+    for r in results:
+        if hasattr(r, 'tool_type') and hasattr(r, 'passed'):
+            # 是 ToolResult 对象
+            item = {
+                'tool_type': r.tool_type,
+                'tool_name': getattr(r, 'tool_name', ''),
+                'passed': r.passed,
+                'success': r.success,
+                'message': r.message,
+                'data': r.data if isinstance(r.data, dict) else {},
+                'elapsed_ms': r.elapsed_ms,
+            }
+            serializable.append(item)
+        elif isinstance(r, dict):
+            # 已经是 dict
+            serializable.append(r)
+        else:
+            serializable.append({'value': str(r)})
+    return serializable
 
 
 class ResultStorage:
+    """生产数据存储管理器
+
+    目录结构:
+        data/production data/
+            YYYY-MM-DD/
+                OK/
+                    ok_log.csv              # 当天 OK 的 CSV 日志
+                    {ID号}/
+                        {ID号}_{HHMMSS}_thumbnail.jpg  # OK 缩略图
+                NG/
+                    ng_log.csv              # 当天 NG 的 CSV 日志
+                    {ID号}/
+                        {ID号}_{HHMMSS}_raw.jpg        # NG 原始图
+                        {ID号}_{HHMMSS}_result.jpg     # NG 标注结果图
+    """
+
     def __init__(self):
-        self._error_dir = ERRORS_DIR
-        os.makedirs(self._error_dir, exist_ok=True)
+        self._production_dir = PRODUCTION_DATA_DIR
+        os.makedirs(self._production_dir, exist_ok=True)
 
-    def save_error_data(self, scheme_name: str, product_id: str,
-                        raw_image, result_image,
-                        tool_results: List[dict], judge_result: bool):
-        date_str = datetime.now().strftime('%Y-%m-%d')
-        date_dir = os.path.join(self._error_dir, date_str)
-        os.makedirs(date_dir, exist_ok=True)
+    # ── 公共保存接口 ──
 
-        prefix = f"{scheme_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    def save_ok_data(self, scheme_name: str, product_id: str,
+                     annotated_image: np.ndarray,
+                     tool_results: List[dict]):
+        """保存 OK 数据：缩略图 + CSV 日志
 
-        raw_path = os.path.join(date_dir, f"{prefix}_raw.jpg")
-        import cv2
+        Args:
+            scheme_name: 方案名称
+            product_id: 产品 ID（一维码数据）
+            annotated_image: 标注结果图（将生成缩略图保存）
+            tool_results: 工具检测结果列表
+        """
+        date_str, time_str = self._get_date_time_strs()
+        safe_id = self._sanitize_id(product_id)
+
+        # 目录: production data/YYYY-MM-DD/OK/{ID号}/
+        ok_dir = self._get_ok_dir(date_str, safe_id)
+        os.makedirs(ok_dir, exist_ok=True)
+
+        # 保存缩略图（最长边 800px）
+        thumb_path = os.path.join(ok_dir, f"{safe_id}_{time_str}_thumbnail.jpg")
+        self._save_thumbnail(annotated_image, thumb_path, max_size=800)
+
+        # 追加 CSV 日志（tool_results 可能包含 ToolResult 对象，需转换）
+        self._append_ok_csv(date_str, {
+            '时间': time_str,
+            '方案': scheme_name,
+            '产品ID': product_id,
+            '判定': 'OK',
+            '工具结果': json.dumps(_tool_results_to_serializable(tool_results), ensure_ascii=False),
+        })
+
+    def save_ng_data(self, scheme_name: str, product_id: str,
+                     raw_image: np.ndarray,
+                     annotated_image: np.ndarray,
+                     tool_results: List[dict]):
+        """保存 NG 数据：原始图 + 标注结果图 + CSV 日志
+
+        Args:
+            scheme_name: 方案名称
+            product_id: 产品 ID（一维码数据）
+            raw_image: 原始图像
+            annotated_image: 标注结果图
+            tool_results: 工具检测结果列表
+        """
+        date_str, time_str = self._get_date_time_strs()
+        safe_id = self._sanitize_id(product_id)
+
+        # 目录: production data/YYYY-MM-DD/NG/{ID号}/
+        ng_dir = self._get_ng_dir(date_str, safe_id)
+        os.makedirs(ng_dir, exist_ok=True)
+
+        # 保存原始图
+        raw_path = os.path.join(ng_dir, f"{safe_id}_{time_str}_raw.jpg")
         cv2.imwrite(raw_path, raw_image)
 
-        result_path = os.path.join(date_dir, f"{prefix}_result.jpg")
-        cv2.imwrite(result_path, result_image)
+        # 保存标注结果图
+        result_path = os.path.join(ng_dir, f"{safe_id}_{time_str}_result.jpg")
+        cv2.imwrite(result_path, annotated_image)
 
-        json_data = {
-            'scheme_name': scheme_name,
-            'product_id': product_id,
-            'timestamp': datetime.now().isoformat(),
-            'judge_result': judge_result,
-            'tool_results': tool_results
-        }
-        json_path = os.path.join(date_dir, f"{prefix}.json")
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(json_data, f, ensure_ascii=False, indent=2)
-
-        self._append_to_csv(date_dir, date_str, {
-            '时间': datetime.now().strftime('%H:%M:%S'),
+        # 追加 CSV 日志（tool_results 可能包含 ToolResult 对象，需转换）
+        self._append_ng_csv(date_str, {
+            '时间': time_str,
             '方案': scheme_name,
             '产品ID': product_id,
             '判定': 'NG',
-            '备注': ''
+            '工具结果': json.dumps(_tool_results_to_serializable(tool_results), ensure_ascii=False),
         })
 
-    def _append_to_csv(self, date_dir: str, date_str: str, data: dict):
-        csv_path = os.path.join(date_dir, f"{date_str}.csv")
+    # ── 路径辅助 ──
+
+    @staticmethod
+    def _get_date_time_strs():
+        now = datetime.now()
+        return now.strftime('%Y-%m-%d'), now.strftime('%H-%M-%S')
+
+    @staticmethod
+    def _sanitize_id(raw_id: str) -> str:
+        """将 ID 中的不安全字符替换为下划线"""
+        if not raw_id:
+            return "UNKNOWN"
+        return raw_id.replace("/", "_").replace("\\", "_").replace(" ", "_")
+
+    def _get_date_dir(self, date_str: str) -> str:
+        """获取某天的根目录: production data/YYYY-MM-DD/"""
+        return os.path.join(self._production_dir, date_str)
+
+    def _get_ok_dir(self, date_str: str, safe_id: str) -> str:
+        """获取 OK 的 ID 子目录: production data/YYYY-MM-DD/OK/{ID号}/"""
+        return os.path.join(self._production_dir, date_str, 'OK', safe_id)
+
+    def _get_ng_dir(self, date_str: str, safe_id: str) -> str:
+        """获取 NG 的 ID 子目录: production data/YYYY-MM-DD/NG/{ID号}/"""
+        return os.path.join(self._production_dir, date_str, 'NG', safe_id)
+
+    # ── CSV 日志 ──
+
+    def _append_ok_csv(self, date_str: str, data: dict):
+        """追加 OK 日志到 CSV"""
+        from core.log_manager import log_info
+        csv_path = os.path.join(self._production_dir, date_str, 'OK', 'ok_log.csv')
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         file_exists = os.path.exists(csv_path)
-        with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=list(data.keys()))
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(data)
+        try:
+            with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=list(data.keys()))
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(data)
+            log_info(f"OK CSV 已追加: {csv_path}")
+        except Exception as e:
+            from core.log_manager import log_error
+            log_error(f"写入 OK CSV 失败 [{csv_path}]: {e}")
 
-    def save_ok_log(self, scheme_name: str, product_id: str,
-                    tool_results: List[dict], judge_result: bool):
-        date_str = datetime.now().strftime('%Y-%m-%d')
-        log_path = os.path.join(LOGS_DIR, f"ok_log_{date_str}.csv")
-        file_exists = os.path.exists(log_path)
+    def _append_ng_csv(self, date_str: str, data: dict):
+        """追加 NG 日志到 CSV"""
+        from core.log_manager import log_info
+        csv_path = os.path.join(self._production_dir, date_str, 'NG', 'ng_log.csv')
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        file_exists = os.path.exists(csv_path)
+        try:
+            with open(csv_path, 'a', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=list(data.keys()))
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(data)
+            log_info(f"NG CSV 已追加: {csv_path}")
+        except Exception as e:
+            from core.log_manager import log_error
+            log_error(f"写入 NG CSV 失败 [{csv_path}]: {e}")
 
-        with open(log_path, 'a', newline='', encoding='utf-8-sig') as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow(['时间', '方案', '产品ID', '判定', '工具结果'])
-            writer.writerow([
-                datetime.now().strftime('%H:%M:%S'),
-                scheme_name,
-                product_id,
-                'OK',
-                json.dumps(tool_results, ensure_ascii=False)
-            ])
+    # ── 缩略图 ──
+
+    @staticmethod
+    def _save_thumbnail(image: np.ndarray, save_path: str, max_size: int = 800):
+        """保存缩略图，保持宽高比，最长边不超过 max_size
+
+        Args:
+            image: 输入图像
+            save_path: 保存路径
+            max_size: 最长边的最大像素值
+        """
+        h, w = image.shape[:2]
+        if max(h, w) > max_size:
+            scale = max_size / max(h, w)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            thumb = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        else:
+            thumb = image
+        cv2.imwrite(save_path, thumb, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+    # ── 旧数据清理 ──
 
     def clean_old_data(self, retention_days: int = 90):
+        """清理 retention_days 天前的生产数据
+
+        Args:
+            retention_days: 保留天数（默认 90 天）
+        """
         cutoff = datetime.now() - timedelta(days=retention_days)
-        if not os.path.exists(self._error_dir):
+        if not os.path.exists(self._production_dir):
             return
-        for dir_name in os.listdir(self._error_dir):
-            dir_path = os.path.join(self._error_dir, dir_name)
+        for dir_name in os.listdir(self._production_dir):
+            dir_path = os.path.join(self._production_dir, dir_name)
             if not os.path.isdir(dir_path):
                 continue
             try:

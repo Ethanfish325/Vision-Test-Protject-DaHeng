@@ -7,8 +7,8 @@
         "regions": [
           {
             "name": "mat1",
-            "x": 1468,
-            "y": 1326,
+            "x": 1399,
+            "y": 1309,
             "width": 500,
             "height": 500,
             "enabled": true
@@ -41,7 +41,7 @@
       "params": {
         "mode": "standard",
         "method": "TM_CCOEFF_NORMED",
-        "threshold": 0.9500000000000001,
+        "threshold": 0.93,
         "template_path": "D:/VScode Project/Python project/VisionTest2.0/model/mat1.png",
         "template_data": null,
         "angle_start": -30,

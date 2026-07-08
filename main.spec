@@ -4,60 +4,148 @@ import os
 import shutil
 
 hidden_imports = [
+    # 视觉工具（动态加载，必须显式声明）
     'vision.tools.preprocess',
     'vision.tools.feature_extract',
     'vision.tools.geometry',
     'vision.tools.measure',
     'vision.tools.recognize',
     'vision.tools.utility',
+    # PyQt5 必要绑定
+    'PyQt5.sip',
+    # gxipy 子模块
+    'gxipy', 'gxipy.gxiapi', 'gxipy.gxidef',
+    'gxipy.gxwrapper', 'gxipy.dxwrapper',
+    # pyserial 隐式子模块
+    'serial.tools.list_ports',
+    # OpenCV 数据
+    'cv2.data',
 ]
 
 # 排除不需要的模块以减小打包体积
 excluded_imports = [
-    # --- PyQt5 不需要的模块 ---
-    'PyQt5.QtWebEngine',
-    'PyQt5.QtWebEngineWidgets',
-    'PyQt5.QtWebChannel',
-    'PyQt5.QtBluetooth',
-    'PyQt5.QtNfc',
-    'PyQt5.QtMultimedia',
-    'PyQt5.QtSensors',
-    'PyQt5.QtSerialPort',
-    'PyQt5.QtXmlPatterns',
-    'PyQt5.QtHelp',
-    'PyQt5.QtDesigner',
-    'PyQt5.QtTest',
-    'PyQt5.QtSql',
-    'PyQt5.QtNetwork',
-    'PyQt5.QtPositioning',
-    'PyQt5.QtLocation',
-    'PyQt5.QtQuick',
-    'PyQt5.QtQml',
-    'PyQt5.QtSvg',
-    'PyQt5.QtPrintSupport',
-    'PyQt5.QtQuickWidgets',
-    # --- 科学计算/可视化库（未使用） ---
+    # ============================================================
+    # PyQt5 不需要的模块（可节省 ~50MB）
+    # ============================================================
+    'PyQt5.QtWebEngine',        # 浏览器引擎
+    'PyQt5.QtWebEngineWidgets', # 浏览器组件
+    'PyQt5.QtWebEngineCore',    # 浏览器核心
+    'PyQt5.QtWebChannel',       # Web 通信通道
+    'PyQt5.QtWebSockets',       # WebSocket
+    'PyQt5.QtBluetooth',        # 蓝牙
+    'PyQt5.QtNfc',              # NFC
+    'PyQt5.QtMultimedia',       # 多媒体
+    'PyQt5.QtMultimediaWidgets',# 多媒体组件
+    'PyQt5.QtSensors',          # 传感器
+    'PyQt5.QtSerialPort',       # 串口（项目用 pyserial，不用 Qt 的）
+    'PyQt5.QtXmlPatterns',      # XML 模式
+    'PyQt5.QtHelp',             # 帮助系统
+    'PyQt5.QtDesigner',         # UI 设计器
+    'PyQt5.QtTest',             # 测试框架
+    'PyQt5.QtSql',              # 数据库
+    'PyQt5.QtNetwork',          # 网络（项目未使用）
+    'PyQt5.QtPositioning',      # 定位
+    'PyQt5.QtLocation',         # 地图位置
+    'PyQt5.QtQuick',            # QML 快速界面
+    'PyQt5.QtQml',              # QML 引擎
+    'PyQt5.QtSvg',              # SVG 渲染
+    'PyQt5.QtPrintSupport',     # 打印支持
+    'PyQt5.QtQuickWidgets',     # QML 组件
+    'PyQt5.QtOpenGL',           # OpenGL（项目未使用 3D）
+    'PyQt5.QtXml',              # XML（项目用 json）
+    'PyQt5.QtDBus',             # D-Bus（Linux 进程通信）
+    # ============================================================
+    # 科学计算/可视化库（未使用，可节省 ~30MB）
+    # ============================================================
     'matplotlib',
     'scipy',
     'notebook',
     'IPython',
+    'jupyter',
+    'jupyter_client',
+    'jupyter_core',
+    'nbformat',
+    'nbconvert',
+    # ============================================================
+    # 图像处理库（未使用）
+    # ============================================================
     'PIL',
+    'Pillow',
+    # ============================================================
+    # 数据处理库（未使用）
+    # ============================================================
     'pandas',
     'sympy',
-    # --- OpenCV 不需要的子模块 ---
-    'cv2.gapi',
-    'cv2.dnn',
-    'cv2.ml',
-    'cv2.flann',
-    'cv2.saliency',
-    'cv2.xfeatures2d',
-    'cv2.ximgproc',
-    'cv2.xphoto',
-    'cv2.photo',
-    'cv2.stitching',
-    # --- 其他不需要的 ---
-    'tornado',
-    'jinja2',
+    'statsmodels',
+    'sklearn',
+    'tensorflow',
+    'torch',
+    'keras',
+    # ============================================================
+    # OpenCV 不需要的子模块（可节省 ~10MB）
+    # ============================================================
+    'cv2.gapi',         # 图形 API
+    'cv2.dnn',          # 深度学习（项目未用）
+    'cv2.ml',           # 机器学习
+    'cv2.flann',        # 近似最近邻
+    'cv2.saliency',     # 显著性检测
+    'cv2.xfeatures2d',  # 额外特征
+    'cv2.ximgproc',     # 额外图像处理
+    'cv2.xphoto',       # 额外照片处理
+    'cv2.photo',        # 照片修复
+    'cv2.stitching',    # 图像拼接
+    'cv2.freetype',     # 字体渲染
+    'cv2.face',         # 人脸识别
+    'cv2.bioinspired',  # 生物启发
+    'cv2.optflow',      # 光流
+    'cv2.reg',          # 图像配准
+    'cv2.sfm',          # 结构光
+    'cv2.superres',     # 超分辨率
+    'cv2.videostab',    # 视频稳定
+    'cv2.viz',          # 3D 可视化
+    'cv2.aruco',        # ArUco 标记
+    'cv2.bgsegm',       # 背景分割
+    'cv2.ccalib',       # 相机校准
+    'cv2.datasets',     # 数据集
+    'cv2.dpm',          # 可变形部件模型
+    'cv2.fuzzy',        # 模糊逻辑
+    'cv2.hdf',          # HDF5
+    'cv2.hfs',          # 层次特征分割
+    'cv2.img_hash',     # 图像哈希
+    'cv2.line_descriptor', # 线段描述
+    'cv2.mcc',          # 色彩校正
+    'cv2.quality',      # 图像质量
+    'cv2.rapid',        # 快速检测
+    'cv2.rgbd',         # RGB-D
+    'cv2.shape',        # 形状匹配
+    'cv2.stereo',       # 立体匹配
+    'cv2.structured_light', # 结构光
+    'cv2.text',         # 文本检测
+    'cv2.tracking',     # 目标跟踪
+    'cv2.wechat_qrcode',# 微信二维码
+    # ============================================================
+    # 其他不需要的
+    # ============================================================
+    'tornado',          # Web 框架
+    'jinja2',           # 模板引擎
+    'tkinter',          # Tk GUI（项目用 PyQt5）
+    'curses',           # 终端 UI
+    'distutils',        # 包构建
+    'setuptools',       # 包构建
+    'pkg_resources',    # 包资源
+    'unittest',         # 测试框架
+    'pydoc',            # 文档生成
+    'http.server',      # HTTP 服务器
+    'smtplib',          # 邮件
+    'telnetlib',        # Telnet
+    'ftplib',           # FTP
+    'dbm',              # 数据库
+    'sqlite3',          # SQLite
+    'xmlrpc',           # XML-RPC
+    'webbrowser',       # 浏览器
+    'antigravity',      # 彩蛋
+    'turtle',           # 海龟绘图
+    'idlelib',          # IDLE IDE
 ]
 
 # ============================================================
@@ -79,14 +167,18 @@ else:
     print(f"[WARN] 未找到 model/ 目录")
 
 # --- data/ 目录（配置文件、用户数据等） ---
+# 排除运行时生成的目录（无需打包）
 _data_dir = 'data'
+_exclude_data_dirs = {'errors', 'logs', 'production data'}
 if os.path.exists(_data_dir):
     for _root, _dirs, _files in os.walk(_data_dir):
+        # 跳过排除目录
+        _dirs[:] = [d for d in _dirs if d not in _exclude_data_dirs]
         for _f in _files:
             _src = os.path.join(_root, _f)
             _dst = os.path.relpath(_root, '.')
             datas.append((_src, _dst))
-    print(f"[INFO] data/ 目录已加入打包数据")
+    print(f"[INFO] data/ 目录已加入打包数据（排除 errors/ 和 logs/）")
 else:
     print(f"[WARN] 未找到 data/ 目录")
 
@@ -137,7 +229,7 @@ else:
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=[os.getcwd()],
     binaries=binaries,
     datas=datas,
     hiddenimports=hidden_imports,
@@ -160,7 +252,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -177,7 +269,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='VisionSystem',
 )
@@ -215,7 +307,7 @@ if os.path.exists(_NMC_DLL_SRC) and not os.path.exists(_NMC_DLL_DST):
 # 后处理：删除不需要的大体积 DLL 文件（可安全删除，项目未使用）
 # ============================================================
 # 这些 DLL 是 PyQt5 自带的，但项目代码中没有使用对应的功能
-_QT_BIN_DIR = os.path.join('dist', 'VisionSystem', 'PyQt5', 'Qt5', 'bin')
+_QT_BIN_DIR = os.path.join('dist', 'VisionSystem', '_internal', 'PyQt5', 'Qt5', 'bin')
 _DLL_TO_REMOVE = [
     'opengl32sw.dll',       # ~20MB - 软件 OpenGL 渲染器
     'libGLESv2.dll',        # ~3.3MB - OpenGL ES 模拟
@@ -230,7 +322,7 @@ _DLL_TO_REMOVE = [
 ]
 
 # 删除不需要的 Qt 翻译文件（.qm），只保留中文和英文
-_QT_TRANSLATIONS_DIR = os.path.join('dist', 'VisionSystem', 'PyQt5', 'Qt5', 'translations')
+_QT_TRANSLATIONS_DIR = os.path.join('dist', 'VisionSystem', '_internal', 'PyQt5', 'Qt5', 'translations')
 
 for dll_name in _DLL_TO_REMOVE:
     dll_path = os.path.join(_QT_BIN_DIR, dll_name)

@@ -1038,6 +1038,21 @@ class NMCSDK:
             except Exception:
                 pass
 
+    def enable_axis2_servo(self, enable: bool = True, station: int = 0) -> None:
+        """仅使能/关闭 Axis_2 (轴索引1)，其他轴保持不变"""
+        logic = Servo_Open if enable else Servo_Close
+        try:
+            self.set_servo_enable(Axis_2, logic, station)
+        except Exception as e:
+            raise NMCRuntimeError(f"Axis_2 伺服{'使能' if enable else '关闭'}失败: {e}")
+
+    def emergency_stop_axis2(self) -> None:
+        """仅紧急停止 Axis_2 (轴索引1)，其他轴不受影响"""
+        try:
+            self.axis_stop(Axis_2, Axis_Stop_IMD)
+        except Exception as e:
+            raise NMCRuntimeError(f"Axis_2 紧急停止失败: {e}")
+
     def get_all_positions(self, station: int = 0) -> List[int]:
         """读取所有轴位置"""
         positions = []

@@ -8,14 +8,14 @@ import contextlib
 from logging.handlers import TimedRotatingFileHandler
 from typing import Optional
 
-from core.paths import ERRORS_DIR, LOGS_DIR
+from core.paths import LOGS_DIR, PRODUCTION_DATA_DIR
 
 # 默认日志限额：50 GB
 _DEFAULT_MAX_LOG_SIZE = 50 * 1024 ** 3
 # 清理目标比例：清理到最大限额的一半
 _DEFAULT_CLEANUP_RATIO = 0.5
 # 需要监控和清理的目录列表（只清理这些目录下的文件，不碰 schemes 等）
-_CLEANUP_DIRS = [LOGS_DIR, ERRORS_DIR]
+_CLEANUP_DIRS = [LOGS_DIR, PRODUCTION_DATA_DIR]
 
 # ============================================================================
 # 日志上下文：用于控制日志是否写入文件

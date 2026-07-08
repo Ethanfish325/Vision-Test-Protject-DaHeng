@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 import os
 import json
-import time
 from typing import Optional, Tuple, List, Dict, Any
 import numpy as np
 import cv2
 
 from .pipeline import Pipeline
 from .tools.base_tool import ToolResult
-from core.paths import ERRORS_DIR
 from core.log_manager import log_error, log_info
+from core.result_storage import ResultStorage
 
 
 class VisionEngine:
@@ -193,51 +192,34 @@ class VisionEngine:
     def save_error_data(self, scheme_name, product_id, raw_image,
                         annotated_image, results, custom_prefix=None):
         """
-        保存检测失败的原始图和标注图到 ERRORS_DIR。
+        保存检测失败的原始图和标注图到 production data 目录。
 
         目录结构:
-            errors/
-                YYYY-MM-DD/                    # 以天为单位的文件夹
-                    {ID号}/                     # 以扫描到的ID号（一维码）为文件夹名
-                        {ID号}_{HHMMSS}_raw.jpg     # 原始图（ID号+时间）
-                        {ID号}_{HHMMSS}_result.jpg  # 标注结果图（ID号+时间）
-                        相同ID号的所有NG记录都放在同一个文件夹下
+            data/production data/
+                YYYY-MM-DD/
+                    NG/
+                        {ID号}/
+                            {ID号}_{HHMMSS}_raw.jpg     # 原始图
+                            {ID号}_{HHMMSS}_result.jpg  # 标注结果图
 
         Args:
             scheme_name: 方案名称
             product_id: 产品ID（一维码数据）
             raw_image: 原始图像
             annotated_image: 标注图像
-            results: 检测结果列表（不再保存为 JSON）
+            results: 检测结果列表
             custom_prefix: 自定义前缀（如一维码），用于文件夹和文件名
         """
         try:
-            time_obj = time.localtime()
-            date_str = time.strftime("%Y-%m-%d", time_obj)
-            time_str = time.strftime("%H-%M-%S", time_obj)
-
-            # 以天为单位的目录
-            date_dir = os.path.join(ERRORS_DIR, date_str)
-
-            # 以ID号（一维码）为文件夹名
-            if custom_prefix:
-                safe_id = custom_prefix.replace("/", "_").replace("\\", "_").replace(" ", "_") or "UNKNOWN"
-            else:
-                safe_id = product_id.replace("/", "_").replace("\\", "_").replace(" ", "_") or "UNKNOWN"
-
-            # 文件夹路径：errors/YYYY-MM-DD/{ID号}/
-            error_dir = os.path.join(date_dir, safe_id)
-            os.makedirs(error_dir, exist_ok=True)
-
-            # 图片文件名：{ID号}_{时间}_raw.jpg
-            file_prefix = f"{safe_id}_{time_str}"
-            raw_path = os.path.join(error_dir, f"{file_prefix}_raw.jpg")
-            cv2.imwrite(raw_path, raw_image)
-
-            result_path = os.path.join(error_dir, f"{file_prefix}_result.jpg")
-            cv2.imwrite(result_path, annotated_image)
-
-            log_info(f"错误图片已保存: {error_dir}")
-
+            storage = ResultStorage()
+            pid = custom_prefix or product_id
+            storage.save_ng_data(
+                scheme_name=scheme_name,
+                product_id=pid,
+                raw_image=raw_image,
+                annotated_image=annotated_image,
+                tool_results=results,
+            )
+            log_info(f"NG 数据已保存 (product_id={pid})")
         except Exception as e:
-            log_error(f"保存错误数据失败: {e}")
+            log_error(f"保存 NG 数据失败: {e}")

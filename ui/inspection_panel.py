@@ -285,6 +285,20 @@ class InspectionPanel(QWidget):
         top_layout.addWidget(product_label)
         top_layout.addWidget(self._product_combo)
 
+        self._btn_reload=QPushButton("⟳ 更新产品方案")
+        self._btn_reload.setMinimumHeight(28)
+        self._btn_reload.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C8; color: #fff; font-size: 12px;
+                font-weight: bold; padding: 2px 8px;
+                border: 1px solid #42A5F5; border-radius: 3px;
+            }
+            QPushButton:hover { background-color: #1976D2; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #555; border-color: #3a3a3a; }
+        """)
+        self._btn_reload.setToolTip("重新加载当前产品方案")
+        top_layout.addWidget(self._btn_reload)
+
         # 状态显示
         state_label = QLabel("状态:")
         state_label.setStyleSheet("font-size: 13px; color: #d4d4d4; font-weight: bold; border: none;")
@@ -456,6 +470,7 @@ class InspectionPanel(QWidget):
         self._btn_stop.clicked.connect(self._on_stop_clicked)
         self._btn_reset.clicked.connect(self._on_reset_clicked)
         self._product_combo.currentTextChanged.connect(self._on_product_changed)
+        self._btn_reload.clicked.connect(self._on_reload_clicked)
 
     def _connect_signals(self):
         """连接工作流信号"""
@@ -534,7 +549,7 @@ class InspectionPanel(QWidget):
         if self._workflow.product_config is None:
             QMessageBox.warning(self, "提示", "请先选择产品型号")
             return
-
+        self._btn_reload.setEnabled(False)
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._product_combo.setEnabled(False)
@@ -560,9 +575,18 @@ class InspectionPanel(QWidget):
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._product_combo.setEnabled(True)
+        self._btn_reload.setEnabled(True)
         self._append_log("已停止自动化检测")
         self.stop_requested.emit()
 
+    def _on_reload_clicked(self):
+        """重新加载当前产品方案"""
+        product_name = self._product_combo.currentText()
+        if not product_name:
+            return
+        self._on_product_changed(product_name)
+        self._append_log(f"已重新加载产品方案: {product_name}")
+        
     def _on_reset_clicked(self):
         """复位按钮点击"""
         if self._workflow:

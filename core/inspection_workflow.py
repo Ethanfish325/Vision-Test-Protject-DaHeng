@@ -339,7 +339,7 @@ class InspectionWorkflow(QObject):
         log_info("停止监听 DI 信号")
 
     def emergency_stop(self):
-        """紧急停止"""
+        """紧急停止 - 仅停止当前配置的运动轴 (Axis_2)，其他轴不受影响"""
         self._poll_timer.stop()
         self._arrive_timer.stop()
         self._start_delay_timer.stop()
@@ -347,8 +347,9 @@ class InspectionWorkflow(QObject):
 
         if self._nmc_sdk and self._nmc_sdk.is_open():
             try:
-                self._nmc_sdk.emergency_stop_all()
-                log_info("紧急停止所有轴")
+                # 仅停止当前配置的轴（Axis_2），其他轴不动
+                self._nmc_sdk.axis_stop(self._config.axis, Axis_Stop_IMD)
+                log_info(f"紧急停止轴{self._config.axis + 1} (其他轴不受影响)")
             except Exception as e:
                 log_error(f"紧急停止失败: {e}")
 
@@ -842,7 +843,8 @@ class InspectionWorkflow(QObject):
             all_passed = all(r.passed for r in self._results)
 
         if all_passed:
-            # OK：直接更新统计并继续
+            # OK：保存数据、更新统计并继续
+            self._save_ng_ok_data()  # 保存 OK 缩略图 + CSV 日志
             self._ok_count += 1
             self.ok_count_changed.emit(self._ok_count)
             # 发射最终结果信号
@@ -874,6 +876,7 @@ class InspectionWorkflow(QObject):
             self._ok_count += 1
             self.ok_count_changed.emit(self._ok_count)
             log_info("手工确认: OK")
+            self._save_ng_ok_data()  # 可选：保存 OK 数据
             self.all_results_ready.emit(True, self._results)
         else:
             # 操作员确认为 NG：保存所有 NG 位置的错误图片和检测数据
@@ -891,30 +894,63 @@ class InspectionWorkflow(QObject):
 
         # 自动继续监听
         self._set_state(self.State.MONITORING)
-
-    def _save_ng_error_data(self):
-        """保存所有 NG 位置的错误图片到 ERRORS_DIR
+        
+    def _save_ng_ok_data(self):
+        """保存所有 OK 位置的检测数据（缩略图 + CSV 日志）
 
         目录结构:
-            errors/
+            data/production data/
                 YYYY-MM-DD/
-                    {ID号}/                      # 以扫描到的ID号（一维码）为文件夹名
-                        {ID号}_{HHMMSS}_raw.jpg    # 原始图
-                        {ID号}_{HHMMSS}_result.jpg # 标注结果图
-                        相同ID号的所有NG记录都放在同一个文件夹下
+                    OK/
+                        {ID号}/
+                            {ID号}_{HHMMSS}_thumbnail.jpg  # 缩略图
+                        ok_log.csv
         """
+        from core.result_storage import ResultStorage
+
         product_name = self._product_config.get("name", "未知产品") if self._product_config else "未知产品"
         barcode = self._barcode_data or "NO_BARCODE"
+
+        storage = ResultStorage()
+        for result in self._results:
+            if result.annotated is not None:
+                try:
+                    storage.save_ok_data(
+                        scheme_name=product_name,
+                        product_id=barcode,
+                        annotated_image=result.annotated,
+                        tool_results=result.tool_results,
+                    )
+                except Exception as e:
+                    log_error(f"保存 OK 位置 [{result.name}] 数据失败: {e}")
+
+    def _save_ng_error_data(self):
+        """保存所有 NG 位置的错误数据（原始图 + 标注图 + CSV 日志）
+
+        目录结构:
+            data/production data/
+                YYYY-MM-DD/
+                    NG/
+                        {ID号}/
+                            {ID号}_{HHMMSS}_raw.jpg      # 原始图
+                            {ID号}_{HHMMSS}_result.jpg   # 标注结果图
+                        ng_log.csv
+        """
+        from core.result_storage import ResultStorage
+
+        product_name = self._product_config.get("name", "未知产品") if self._product_config else "未知产品"
+        barcode = self._barcode_data or "NO_BARCODE"
+
+        storage = ResultStorage()
         for result in self._results:
             if not result.passed and result.raw_image is not None:
                 try:
-                    self._vision_engine.save_error_data(
+                    storage.save_ng_data(
                         scheme_name=product_name,
                         product_id=barcode,
                         raw_image=result.raw_image,
                         annotated_image=result.annotated,
-                        results=result.tool_results,
-                        custom_prefix=barcode,  # 使用一维码作为文件夹名
+                        tool_results=result.tool_results,
                     )
                 except Exception as e:
                     log_error(f"保存 NG 位置 [{result.name}] 错误数据失败: {e}")

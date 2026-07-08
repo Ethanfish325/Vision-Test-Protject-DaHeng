@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 相机管理模块 — Daheng (大恒) GalaxySDK 实现
-=============================================
-替换原有的 Hikvision MVS SDK 实现。
 
 对外接口（保持与旧版一致）：
     CameraManager          — 相机管理器（单例模式）

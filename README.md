@@ -1,6 +1,6 @@
 # 视觉检测系统 (Vision Inspection System)
 
-> **版本**: 2.3.0 | **开发语言**: Python 3.8+ | **GUI框架**: PyQt5 | **图像处理**: OpenCV 4.x | **相机SDK**: 大恒 GalaxySDK (gxipy)
+> **版本**: 2.3.1 | **开发语言**: Python 3.8+ | **GUI框架**: PyQt5 | **图像处理**: OpenCV 4.x | **相机SDK**: 大恒 GalaxySDK (gxipy)
 
 ---
 
@@ -26,8 +26,8 @@
 
 | 模式 | 说明 |
 |------|------|
-| **工人模式 (Operator Mode)** | 简化的操作界面，一键执行检测，显示 OK/NG 结果 |
-| **工程师模式 (Engineer Mode)** | 完整的方案编辑界面，可配置检测流水线 |
+| **自动化模式 (Automation Mode)** | DI 信号触发的多位置自动化检测，实时显示位置检测结果和统计信息 |
+| **设计模式 (Engineer Mode)** | 完整的方案编辑界面，可配置检测流水线、拖拽式编辑、实时预览 |
 
 ---
 
@@ -46,6 +46,7 @@ VisionTest2.0/
 ├── camera_manager.py                # 相机管理模块（大恒 GalaxySDK 封装）
 │
 ├── core/                            # 核心模块
+│   ├── __init__.py
 │   ├── paths.py                     # 路径管理（数据目录、方案目录等）
 │   ├── config_manager.py            # 配置管理（单例模式）
 │   ├── log_manager.py               # 日志管理（按天轮转、自动清理）
@@ -57,10 +58,12 @@ VisionTest2.0/
 │   └── inspection_workflow.py       # 自动化检测工作流（DI 触发 + 多位置检测）
 │
 ├── ui/                              # UI 界面模块
+│   ├── __init__.py
 │   ├── constants.py                 # 颜色、图标等 UI 常量
-│   ├── main_window.py               # 主窗口（工人/工程师双模式，3612 行）
+│   ├── main_window.py               # 主窗口（工人/工程师双模式）
 │   ├── inspection_panel.py          # 检测面板
 │   └── widgets/                     # 自定义控件
+│       ├── __init__.py
 │       ├── camera_panel.py          # 相机控制面板（含白平衡 R/G/B 调节 UI）
 │       ├── flow_canvas.py           # 流程画布
 │       ├── operator_toolbox.py      # 算子工具箱（支持搜索、拖拽）
@@ -70,22 +73,24 @@ VisionTest2.0/
 │       ├── serial_dialog.py         # 串口通信对话框
 │       ├── step_slot_widget.py      # 步骤插槽控件（支持拖拽排序）
 │       ├── zoomable_label.py        # 可缩放图片显示控件
-│       ├── nmc_control_dialog.py    # NMC 运动控制对话框
-│       └── pipeline_editor.py       # 可视化流水线编辑器
+│       └── nmc_control_dialog.py    # NMC 运动控制对话框
 │
 ├── vision/                          # 视觉算法模块
+│   ├── __init__.py
 │   ├── pipeline.py                  # 流水线定义和管理（工具注册、步骤执行）
 │   ├── vision_engine.py             # 视觉引擎（执行入口、结果保存）
-│   └── tools/                       # 视觉工具集（6 大类，30+ 种工具）
+│   └── tools/                       # 视觉工具集（6 大类，34 种工具）
+│       ├── __init__.py
 │       ├── base_tool.py             # 工具基类（VisionTool、ToolResult、PipelineContext）
 │       ├── preprocess.py            # 预处理工具（8 种）
 │       ├── feature_extract.py       # 特征提取工具（7 种）
 │       ├── geometry.py              # 几何检测工具（4 种）
 │       ├── measure.py               # 测量工具（7 种）
-│       ├── recognize.py             # 识别工具（5 种）
+│       ├── recognize.py             # 识别工具（4 种 + FootPadDetect 脚垫识别）
 │       └── utility.py               # 辅助工具（3 种）
 │
 ├── gxipy/                           # 大恒 GalaxySDK Python 接口
+│   ├── __init__.py
 │   ├── gxiapi.py                    # 相机 API 封装
 │   ├── gxidef.py                    # 常量/枚举定义
 │   ├── gxwrapper.py                 # C 接口封装
@@ -94,10 +99,18 @@ VisionTest2.0/
 ├── data/                            # 运行时数据目录（自动创建）
 │   ├── icon.png                     # 应用程序图标
 │   ├── users.json                   # 用户数据
-│   ├── config.json                  # 系统配置
+│   ├── production data/             # 生产检测数据（按日期分目录）
+│   │   └── YYYY-MM-DD/
+│   │       ├── NG/                  # NG 数据（原始图像 + 结果图像 + CSV 日志）
+│   │       └── OK/                  # OK 数据（CSV 日志）
 │   ├── schemes/                     # 检测方案文件（JSON 格式）
+│   │   ├── 默认方案.json
+│   │   ├── 位置1方案.json
+│   │   └── 位置2方案.json
 │   ├── products/                    # 产品配置（JSON 格式）
-│   ├── errors/                      # NG 数据（按日期分目录）
+│   │   ├── 测试产品方案.json
+│   │   ├── 默认产品.json
+│   │   └── DX8.json
 │   └── logs/                        # 系统日志（按天轮转）
 │
 ├── model/                           # 模型与样本文件
@@ -106,7 +119,7 @@ VisionTest2.0/
 │   ├── title.jpg / title.png        # 标题检测样本
 │   └── title1.jpg / title1.png      # 标题检测样本
 │
-├── plans/                           # 开发计划文档（16 份）
+├── plans/                           # 开发计划文档（19 份）
 │
 └── *.dll                            # 大恒相机 SDK DLL
     ├── GxIAPI.dll                   # 相机 API 库
@@ -127,7 +140,7 @@ VisionTest2.0/
 - 支持 **ROI 坐标**在缩放/裁剪操作后自动跟踪
 - 支持**多区域 ROI**：命名区域、百分比坐标、导出/导入配置
 
-### 2. 六大类视觉工具（30+ 种）
+### 2. 六大类视觉工具（34 种）
 
 #### 预处理（8 种）
 | 工具 | 功能 |
@@ -193,7 +206,7 @@ VisionTest2.0/
 - 方案的导入和导出（JSON 格式）
 - 方案包含完整的流水线配置和参数
 - 方案文件自动保存至 `data/schemes/` 目录
-- 支持**产品配置管理**：相机参数、运动参数、检测位置列表
+- 支持**产品配置管理**：相机参数、运动参数、检测位置列表、条码扫描配置
 
 ### 4. 用户权限管理
 
@@ -279,10 +292,11 @@ IDLE → MONITORING → MOVING → CAPTURING → TESTING
     → RETURNING → SHOW_RESULT → MONITORING
 ```
 
-- 产品配置管理：相机参数、运动参数、检测位置列表
+- 产品配置管理：相机参数、运动参数、检测位置列表、条码扫描
 - 每个位置可关联独立的视觉方案
 - 统计信息：触发次数、OK 次数、NG 次数
 - 紧急停止、错误复位
+- DI 输入位可配置（触发位、OK 输出位、NG 输出位、复位位）
 
 ### 9. 结果记录
 
@@ -301,7 +315,8 @@ IDLE → MONITORING → MOVING → CAPTURING → TESTING
 - 参数配置对话框带**实时预览**
 - 多区域 ROI **可视化编辑器**（支持命名、百分比坐标）
 - 可缩放图片显示控件（支持鼠标滚轮缩放、拖拽平移、双击重置）
-- **工人/工程师双模式**切换
+- **自动化/设计双模式**切换
+- **1024×768 分辨率适配**（工控机屏幕）
 
 ---
 
@@ -333,7 +348,7 @@ IDLE → MONITORING → MOVING → CAPTURING → TESTING
 
 | 文件 | 职责 |
 |------|------|
-| [`main_window.py`](ui/main_window.py) | 主窗口（3612 行）：工人/工程师双模式、菜单栏、相机控制、串口通信、运动控制、用户登录 |
+| [`main_window.py`](ui/main_window.py) | 主窗口：自动化/设计双模式、菜单栏、相机控制、串口通信、运动控制、用户登录 |
 | [`constants.py`](ui/constants.py) | UI 常量：颜色、图标、样式表 |
 | [`inspection_panel.py`](ui/inspection_panel.py) | 检测面板 |
 | [`widgets/camera_panel.py`](ui/widgets/camera_panel.py) | 相机控制面板：曝光/增益/帧率/白平衡 R/G/B 调节 |
@@ -417,14 +432,15 @@ gxipy               # 大恒 GalaxySDK（内置于项目 gxipy/ 目录）
 - 默认工程师账号：`engineer` / `123456`
 - 默认操作员账号：`operator` / `123456`
 
-### 2. 工人模式
+### 2. 自动化模式
 
-1. 从方案列表中选择检测方案，点击「导入方案」
-2. 点击「导入图像」加载待检测图片，或连接相机后点击「拍照」
-3. 点击「开始检测」执行流水线
-4. 查看 OK/NG 结果
+1. 在工程师模式下创建产品配置（包含相机参数、运动参数、检测位置、条码扫描配置）
+2. 为每个位置关联视觉方案
+3. 切换到自动化模式，选择产品
+4. 系统自动监听 DI 信号，触发后自动执行：移动 → 拍照 → 检测 → 退回原点
+5. 实时查看各位置检测结果（OK/NG）和统计信息
 
-### 3. 设计模式
+### 3. 设计模式（工程师模式）
 
 1. 创建或打开检测方案
 2. 从算子工具箱拖拽算子到流水线插槽
@@ -450,12 +466,13 @@ gxipy               # 大恒 GalaxySDK（内置于项目 gxipy/ 目录）
 5. 在发送区输入数据，选择文本或 HEX 模式，点击「发送」
 6. 接收区实时显示接收到的数据
 
-### 6. 自动化检测
+### 6. 串口自动测试工作流
 
-1. 在工程师模式下创建产品配置（包含相机参数、运动参数、检测位置）
-2. 为每个位置关联视觉方案
-3. 切换到工人模式，选择产品
-4. 系统自动监听 DI 信号，触发后自动执行：移动 → 拍照 → 检测 → 退回原点
+1. 通过菜单栏「通信 > 串口通信」打开串口通信对话框
+2. 配置串口参数并打开串口
+3. 在串口对话框中启用「自动测试工作流」
+4. 系统进入状态机模式：`IDLE → WAITING_TRIGGER → CAPTURING → TESTING → SENDING_RESULT`
+5. 串口数据触发后自动执行检测并返回结果
 
 ---
 
@@ -491,11 +508,12 @@ pyinstaller main.spec
 
 ## 开发计划
 
-项目包含 16 份详细的开发计划文档，位于 [`plans/`](plans/) 目录：
+项目包含 19 份详细的开发计划文档，位于 [`plans/`](plans/) 目录：
 
 | 文档 | 说明 |
 |------|------|
 | [`architecture_optimization_plan.md`](plans/architecture_optimization_plan.md) | 架构优化计划 |
+| [`barcode_scan_integration_plan.md`](plans/barcode_scan_integration_plan.md) | 条码扫描集成计划 |
 | [`brightness_measure_plan.md`](plans/brightness_measure_plan.md) | 亮度测量计划 |
 | [`camera_init_fixed_params_plan.md`](plans/camera_init_fixed_params_plan.md) | 相机初始化固定参数计划 |
 | [`default_user_change_record.md`](plans/default_user_change_record.md) | 默认用户变更记录 |
@@ -503,6 +521,7 @@ pyinstaller main.spec
 | [`footpad_detect_robustness_plan.md`](plans/footpad_detect_robustness_plan.md) | 脚垫检测鲁棒性计划 |
 | [`hikvision_to_daheng_migration_plan.md`](plans/hikvision_to_daheng_migration_plan.md) | 海康威视到大恒迁移计划 |
 | [`inspection_workflow_plan.md`](plans/inspection_workflow_plan.md) | 检测工作流计划 |
+| [`nmc_di_input_monitor_plan.md`](plans/nmc_di_input_monitor_plan.md) | NMC DI 输入监控计划 |
 | [`nmc_motion_control_integration_plan.md`](plans/nmc_motion_control_integration_plan.md) | NMC 运动控制集成计划 |
 | [`operator_optimization_plan.md`](plans/operator_optimization_plan.md) | 操作员模式优化计划 |
 | [`overlay_image_implementation_plan.md`](plans/overlay_image_implementation_plan.md) | 叠加图层实现计划 |
@@ -636,11 +655,11 @@ pyinstaller main.spec
 | 模块 | 文件数 | 代码行数（约） |
 |------|--------|---------------|
 | `core/` | 9 | 2,500+ |
-| `ui/` | 12 | 6,500+ |
+| `ui/` | 13 | 6,500+ |
 | `vision/` | 9 | 4,000+ |
 | `camera_manager.py` | 1 | 1,200+ |
 | `main.py` | 1 | 220 |
-| **总计** | **32+** | **14,000+** |
+| **总计** | **33+** | **14,000+** |
 
 ### 架构特点
 

@@ -960,14 +960,14 @@ class MainWindow(QMainWindow):
     # ──────────────── 轴控制标签页 ────────────────
 
     def _build_axis_control_tab(self):
-        """构建轴控制标签页（工程师调试用）"""
+        """构建轴控制标签页（工程师调试用）- 仅控制 Axis_2"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
         # ── 轴控制主分组 ──
-        axis_group = QGroupBox("轴控制")
+        axis_group = QGroupBox("轴控制 (Axis_2)")
         axis_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold; font-size: 13px; border: 1px solid #444;
@@ -978,18 +978,11 @@ class MainWindow(QMainWindow):
         axis_layout = QVBoxLayout(axis_group)
         axis_layout.setSpacing(4)
 
-        # 轴选择行
+        # 固定显示 Axis_2，无选择下拉框
         axis_sel_layout = QHBoxLayout()
-        axis_sel_layout.addWidget(QLabel("轴:"))
-        self._eng_axis_combo = QComboBox()
-        self._eng_axis_combo.addItems(["Axis_1", "Axis_2", "Axis_3", "Axis_4"])
-        self._eng_axis_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #3c3c3c; color: #d4d4d4;
-                border: 1px solid #555; padding: 3px 6px; border-radius: 3px;
-            }
-        """)
-        axis_sel_layout.addWidget(self._eng_axis_combo)
+        axis_label = QLabel("当前轴: Axis_2")
+        axis_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4fc3f7; padding: 3px 6px;")
+        axis_sel_layout.addWidget(axis_label)
         axis_sel_layout.addStretch()
         axis_layout.addLayout(axis_sel_layout)
 
@@ -1039,7 +1032,7 @@ class MainWindow(QMainWindow):
         param_layout = QHBoxLayout()
         param_layout.setSpacing(4)
         param_layout.addWidget(QLabel("速度:"))
-        self._eng_axis_speed = QLineEdit("50000")
+        self._eng_axis_speed = QLineEdit("10000")
         self._eng_axis_speed.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
@@ -1050,7 +1043,7 @@ class MainWindow(QMainWindow):
         self._eng_axis_speed.setFixedWidth(60)
         param_layout.addWidget(self._eng_axis_speed)
         param_layout.addWidget(QLabel("加速度:"))
-        self._eng_axis_acc = QLineEdit("100000")
+        self._eng_axis_acc = QLineEdit("10000")
         self._eng_axis_acc.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
@@ -1156,7 +1149,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(axis_group)
 
         # ── 回零控制分组 ──
-        home_group = QGroupBox("回零控制")
+        home_group = QGroupBox("回零控制 (Axis_2)")
         home_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold; font-size: 13px; border: 1px solid #444;
@@ -1171,7 +1164,7 @@ class MainWindow(QMainWindow):
         home_param_layout = QHBoxLayout()
         home_param_layout.setSpacing(4)
         home_param_layout.addWidget(QLabel("搜索速度:"))
-        self._eng_home_speed = QLineEdit("50000")
+        self._eng_home_speed = QLineEdit("10000")
         self._eng_home_speed.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
@@ -1182,7 +1175,7 @@ class MainWindow(QMainWindow):
         self._eng_home_speed.setFixedWidth(60)
         home_param_layout.addWidget(self._eng_home_speed)
         home_param_layout.addWidget(QLabel("加速度:"))
-        self._eng_home_acc = QLineEdit("50000")
+        self._eng_home_acc = QLineEdit("10000")
         self._eng_home_acc.setStyleSheet("""
             QLineEdit {
                 background-color: #3c3c3c; color: #d4d4d4;
@@ -1304,8 +1297,8 @@ class MainWindow(QMainWindow):
     # ── 轴控制操作 ──
 
     def _get_axis_index(self) -> int:
-        """获取当前选择的轴索引（0-based）"""
-        return self._eng_axis_combo.currentIndex()
+        """固定返回 Axis_2 的轴索引（0-based = 1）"""
+        return 1  # Axis_2
 
     def _on_eng_axis_move_to(self):
         """移动到指定位置（使用位置输入框的值）"""
@@ -2754,7 +2747,7 @@ class MainWindow(QMainWindow):
 
     def _show_log_settings(self):
         """打开日志限额设置对话框"""
-        from core.paths import LOGS_DIR, ERRORS_DIR
+        from core.paths import LOGS_DIR, PRODUCTION_DATA_DIR
         from core.log_manager import _get_dir_size, _CLEANUP_DIRS
 
         dialog = QDialog(self)
@@ -2804,13 +2797,14 @@ class MainWindow(QMainWindow):
         except Exception:
             size_str = "未知"
 
-        # 分别显示 logs 和 errors 的大小
+        # 分别显示 logs 和 production data 的大小
         try:
             logs_size = _get_dir_size(LOGS_DIR)
-            errs_size = _get_dir_size(ERRORS_DIR)
+            prod_size = _get_dir_size(PRODUCTION_DATA_DIR)
             logs_str = f"{logs_size / (1024**3):.2f} GB" if logs_size >= 1024**3 else f"{logs_size / (1024**2):.1f} MB"
-            errs_str = f"{errs_size / (1024**3):.2f} GB" if errs_size >= 1024**3 else f"{errs_size / (1024**2):.1f} MB"
-            detail_str = f"   ├ 日志(logs): {logs_str}\n   └ 错误数据(errors): {errs_str}"
+            prod_str = f"{prod_size / (1024**3):.2f} GB" if prod_size >= 1024**3 else f"{prod_size / (1024**2):.1f} MB"
+            detail_str = (f"   ├ 日志(logs): {logs_str}\n"
+                          f"   └ 生产数据(production data): {prod_str}")
         except Exception:
             detail_str = ""
 

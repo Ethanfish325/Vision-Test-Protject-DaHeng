@@ -32,7 +32,10 @@ ERRORS_DIR = os.path.join(DATA_DIR, 'errors')
 LOGS_DIR = os.path.join(DATA_DIR, 'logs')
 ICON_FILE = os.path.join(DATA_DIR, 'icon.png')
 
+# 生产数据目录（按日期/OK-NG 组织）
+PRODUCTION_DATA_DIR = os.path.join(DATA_DIR, 'production data')
+
 
 def ensure_dirs():
-    for d in [DATA_DIR, SCHEME_DIR, ERRORS_DIR, LOGS_DIR]:
+    for d in [DATA_DIR, SCHEME_DIR, LOGS_DIR, PRODUCTION_DATA_DIR]:
         os.makedirs(d, exist_ok=True)
